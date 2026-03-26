@@ -245,8 +245,135 @@ class TurboQuantFallback:
         return self.dequantize(idx, norms)
 
 
+if HAS_TRITON:
+
+    @triton.jit
+    def _fused_quantized_attention_kernel(
+        Q_rot_ptr, K_idx_ptr, K_norms_ptr, Centroids_ptr, Out_ptr,
+        B_H: tl.constexpr, Q_LEN: tl.constexpr, KV_LEN, D: tl.constexpr,
+        scale,
+        BLOCK_KV: tl.constexpr,
+    ):
+        """
+        Fused quantized attention: compute Q_rot @ centroids[K_idx]^T * K_norms * scale.
+
+        Each program handles one (batch*head, query_pos) pair.
+        Iterates over KV positions in blocks, accumulating the dot product
+        via centroid lookup from shared memory.
+        """
+        bh = tl.program_id(0)
+        q_pos = tl.program_id(1)
+
+        d_range = tl.arange(0, D)
+        q_ptrs = Q_rot_ptr + bh * Q_LEN * D + q_pos * D + d_range
+        q_vals = tl.load(q_ptrs, mask=d_range < D, other=0.0).to(tl.float32)
+
+        for kv_start in range(0, KV_LEN, BLOCK_KV):
+            kv_range = kv_start + tl.arange(0, BLOCK_KV)
+            kv_mask = kv_range < KV_LEN
+
+            acc = tl.zeros([BLOCK_KV], dtype=tl.float32)
+
+            for j in range(D):
+                idx_ptrs = K_idx_ptr + bh * KV_LEN * D + kv_range * D + j
+                indices = tl.load(idx_ptrs, mask=kv_mask, other=0).to(tl.int64)
+                c_vals = tl.load(Centroids_ptr + indices, mask=kv_mask, other=0.0).to(tl.float32)
+                acc += q_vals[j] * c_vals
+
+            norm_ptrs = K_norms_ptr + bh * KV_LEN + kv_range
+            norms = tl.load(norm_ptrs, mask=kv_mask, other=0.0).to(tl.float32)
+            acc = acc * norms * scale
+
+            out_ptrs = Out_ptr + bh * Q_LEN * KV_LEN + q_pos * KV_LEN + kv_range
+            tl.store(out_ptrs, acc, mask=kv_mask)
+
+
+class FusedQuantizedAttentionCUDA:
+    """
+    Compute Q @ K_hat^T entirely via Triton, without materializing the full
+    dequantized key tensor. The centroid table (2^b entries) stays in registers.
+
+    This is the "fused" approach from the paper: the kernel reads uint8 indices
+    from global memory, looks up centroids, and accumulates the dot product —
+    never creating the (seq_len, head_dim) float intermediate.
+    """
+
+    def __init__(self, bit_width, head_dim, device, rotation_seed=42):
+        assert HAS_TRITON, "Triton required for fused attention"
+        assert device.type == "cuda"
+
+        self.bit_width = bit_width
+        self.head_dim = head_dim
+        self.device = device
+        self.scale = 1.0 / math.sqrt(head_dim)
+
+        d = head_dim
+        gen = torch.Generator(device="cpu").manual_seed(rotation_seed)
+        G = torch.randn(d, d, generator=gen, dtype=torch.float32)
+        Q, R = torch.linalg.qr(G)
+        ds = torch.sign(torch.diag(R))
+        ds[ds == 0] = 1.0
+        self.Pi = (Q * ds.unsqueeze(0)).to(device).contiguous()
+        self.Pi_T = self.Pi.T.contiguous()
+
+        sigma = 1.0 / math.sqrt(d)
+        c_np, b_np = _lloyd_max_gaussian(2 ** bit_width, sigma=sigma)
+        self.centroids = torch.tensor(c_np, dtype=torch.float32, device=device).contiguous()
+        self.boundaries = torch.tensor(b_np[1:-1], dtype=torch.float32, device=device).contiguous()
+
+    @torch.no_grad()
+    def quantize_keys(self, K):
+        flat = K.float().reshape(-1, self.head_dim)
+        norms = flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
+        y = (flat / norms) @ self.Pi_T
+        idx = torch.bucketize(y, self.boundaries).to(torch.uint8)
+        return idx.view(K.shape), norms.squeeze(-1).view(K.shape[:-1])
+
+    @torch.no_grad()
+    def fused_attention_scores(self, Q_tensor, K_idx, K_norms):
+        """
+        Compute attention scores via Triton kernel — no intermediate float tensor.
+
+        Args:
+            Q_tensor: (B, H, q_len, D) float queries
+            K_idx:    (B, H, kv_len, D) uint8 key indices
+            K_norms:  (B, H, kv_len) float32 key norms
+
+        Returns:
+            scores: (B, H, q_len, kv_len) pre-softmax attention scores
+        """
+        B, H, q_len, D = Q_tensor.shape
+        kv_len = K_idx.shape[2]
+        BH = B * H
+
+        Q_rot = (Q_tensor.float().reshape(BH, q_len, D) @ self.Pi_T).contiguous()
+        K_idx_flat = K_idx.reshape(BH, kv_len, D).contiguous()
+        K_norms_flat = K_norms.reshape(BH, kv_len).contiguous()
+
+        out = torch.empty(BH, q_len, kv_len, dtype=torch.float32, device=self.device)
+
+        BLOCK_KV = min(128, triton.next_power_of_2(kv_len))
+        grid = (BH, q_len)
+
+        _fused_quantized_attention_kernel[grid](
+            Q_rot, K_idx_flat, K_norms_flat, self.centroids, out,
+            BH, q_len, kv_len, D,
+            self.scale,
+            BLOCK_KV,
+        )
+
+        return out.view(B, H, q_len, kv_len)
+
+
 def get_quantizer(bit_width, head_dim, device, rotation_seed=42):
     """Factory: returns CUDA Triton quantizer if available, else PyTorch fallback."""
     if HAS_TRITON and device.type == "cuda":
         return TurboQuantCUDA(bit_width, head_dim, device, rotation_seed)
     return TurboQuantFallback(bit_width, head_dim, device, rotation_seed)
+
+
+def get_fused_attention(bit_width, head_dim, device, rotation_seed=42):
+    """Factory: returns fused Triton attention if available, else None."""
+    if HAS_TRITON and device.type == "cuda":
+        return FusedQuantizedAttentionCUDA(bit_width, head_dim, device, rotation_seed)
+    return None

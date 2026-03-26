@@ -1,0 +1,199 @@
+{
+  "gpu": "NVIDIA A40",
+  "model": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+  "model_config": {
+    "layers": 24,
+    "heads": 32,
+    "head_dim": 64,
+    "params_B": 1.71
+  },
+  "baseline": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.922,
+      "tps": 8.7,
+      "kv_memory": 9633792,
+      "peak_gpu_mb": 3442.3,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find out how far the train travels, we need to multiply the speed of the train by the time it travels.\n\nSpeed = 60 mph\nTime = 2.5 hours\n\nDistance = Speed * Time\n\nDistance = 60 mph * 2.5 hours\n\nDistance = 150 miles\n\nSo, the train travels 150 miles.",
+      "tokens": 84,
+      "time": 1.601,
+      "tps": 52.5,
+      "kv_memory": 27328512,
+      "peak_gpu_mb": 3459.4,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here's a simple recursive function in Python to compute factorial:\n\n```python\ndef factorial(n):\n    if n == 0 or n == 1:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function works by recursively multiplying the input number `n` by the factorial of `n-1`. The base case is when `n` is 0 or 1, in which case the",
+      "tokens": 100,
+      "time": 1.815,
+      "tps": 55.1,
+      "kv_memory": 27525120,
+      "peak_gpu_mb": 3459.6,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq4": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.269,
+      "tps": 29.8,
+      "kv_memory": 2709504,
+      "peak_gpu_mb": 3447.1,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "Sure, I can help with that.\n\nThe formula to calculate the distance traveled by an object when it moves at a constant speed is:\n\nDistance = Speed \u00d7 Time\n\nIn this case, the speed of the train is 60 mph and the time it travels is 2.5 hours.\n\nSo, the distance the train travels is:\n\nDistance = 60 mph \u00d7 2.5 hours = 150 miles\n\nSo, the",
+      "tokens": 100,
+      "time": 2.638,
+      "tps": 37.9,
+      "kv_memory": 8570880,
+      "peak_gpu_mb": 3481.1,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here's a simple recursive function in Python to compute factorial:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function works by calling itself with decreasing values of `n` until it reaches 0. At that point, it starts returning the results back up the call stack, multiplying each result by the current value of `n`.",
+      "tokens": 99,
+      "time": 2.836,
+      "tps": 34.9,
+      "kv_memory": 7686144,
+      "peak_gpu_mb": 3476.2,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq3.5": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.411,
+      "tps": 19.5,
+      "kv_memory": 2558976,
+      "peak_gpu_mb": 3447.4,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find out how far the train travels, we need to multiply the speed of the train by the time it travels.\n\nSpeed of the train = 60 mph\nTime = 2.5 hours\n\nDistance = Speed \u00d7 Time\n\nDistance = 60 mph \u00d7 2.5 hours\n\nDistance = 150 miles\n\nSo, the train travels 150 miles in 2.5 hours.",
+      "tokens": 93,
+      "time": 4.756,
+      "tps": 19.6,
+      "kv_memory": 7729152,
+      "peak_gpu_mb": 3481.3,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here's a Python function that uses recursion to compute the factorial of a given number:\n\n```python\ndef factorial(n):\n    if n == 0 or n == 1:\n        return 1\n    else:\n        return n * factorial(n - 1)\n```\n\nThis function takes an integer `n` as input and returns its factorial. If `n` is 0 or 1, the function returns 1, as the",
+      "tokens": 100,
+      "time": 5.073,
+      "tps": 19.7,
+      "kv_memory": 7311360,
+      "peak_gpu_mb": 3479.1,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq3": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.229,
+      "tps": 34.9,
+      "kv_memory": 2107392,
+      "peak_gpu_mb": 3447.1,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled by a train, you can use the formula:\n\nDistance = Speed \u00d7 Time\n\nIn this case, the speed is 60 mph and the time is 2.5 hours.\n\nSo, the distance traveled is:\n\nDistance = 60 mph \u00d7 2.5 hours\n\nDistance = 150 miles\n\nTherefore, the train travels 150 miles in 2.5 hours.",
+      "tokens": 97,
+      "time": 2.725,
+      "tps": 35.6,
+      "kv_memory": 6537216,
+      "peak_gpu_mb": 3480.1,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here's a simple recursive function in Python to compute the factorial of a given number:\n\n```python\ndef factorial(n):\n    if n == 0 or n == 1:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nHowever, this recursive function will cause a stack overflow for large inputs. Here's a version that uses iteration instead:\n\n```python\ndef factorial(n):\n    result =",
+      "tokens": 100,
+      "time": 2.851,
+      "tps": 35.1,
+      "kv_memory": 6021120,
+      "peak_gpu_mb": 3476.5,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq2.5": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.435,
+      "tps": 18.4,
+      "kv_memory": 1956864,
+      "peak_gpu_mb": 3447.4,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To calculate the distance traveled by a train, we need to multiply the speed and time.\n\nDistance = Speed * Time\n\nIn this scenario, the train travels at a constant speed of 60 mph. The time taken is 2.5 hours.\n\nDistance = Speed * Time\n\nDistance = 60 mph * 2.5 hours\n\nDistance = 15 miles\n\nSo, the train travels 15 miles in 2.5 hours",
+      "tokens": 100,
+      "time": 5.104,
+      "tps": 19.6,
+      "kv_memory": 6190080,
+      "peak_gpu_mb": 3483.7,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Sure, here's a Python function that computes the factorial of a number recursively:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```",
+      "tokens": 57,
+      "time": 2.967,
+      "tps": 19.2,
+      "kv_memory": 3873792,
+      "peak_gpu_mb": 3464.1,
+      "prompt": "Code Generation"
+    }
+  ],
+  "attention_speedup": {
+    "512": {
+      "baseline_ms": 0.0224,
+      "dequant_then_matmul_ms": 0.1004,
+      "quantized_attn_ms": 0.1313,
+      "speedup_vs_baseline": 0.17,
+      "speedup_vs_dequant": 0.76
+    },
+    "1024": {
+      "baseline_ms": 0.0224,
+      "dequant_then_matmul_ms": 0.1868,
+      "quantized_attn_ms": 0.1385,
+      "speedup_vs_baseline": 0.16,
+      "speedup_vs_dequant": 1.35
+    },
+    "2048": {
+      "baseline_ms": 0.0218,
+      "dequant_then_matmul_ms": 0.3687,
+      "quantized_attn_ms": 0.2517,
+      "speedup_vs_baseline": 0.09,
+      "speedup_vs_dequant": 1.46
+    },
+    "4096": {
+      "baseline_ms": 0.0318,
+      "dequant_then_matmul_ms": 0.718,
+      "quantized_attn_ms": 0.471,
+      "speedup_vs_baseline": 0.07,
+      "speedup_vs_dequant": 1.52
+    },
+    "8192": {
+      "baseline_ms": 0.0599,
+      "dequant_then_matmul_ms": 1.4127,
+      "quantized_attn_ms": 0.9049,
+      "speedup_vs_baseline": 0.07,
+      "speedup_vs_dequant": 1.56
+    },
+    "16384": {
+      "baseline_ms": 0.1136,
+      "dequant_then_matmul_ms": 2.8021,
+      "quantized_attn_ms": 1.7769,
+      "speedup_vs_baseline": 0.06,
+      "speedup_vs_dequant": 1.58
+    }
+  }
+}

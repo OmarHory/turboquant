@@ -28,6 +28,12 @@ import torch
 import numpy as np
 from scipy.stats import norm
 
+try:
+    from turboquant.cuda_kernels import FusedQuantizedAttentionCUDA, HAS_TRITON
+except ImportError:
+    HAS_TRITON = False
+    FusedQuantizedAttentionCUDA = None
+
 
 def _lloyd_max_gaussian(num_levels, sigma=1.0, max_iter=200):
     k = num_levels
@@ -81,8 +87,11 @@ class QuantizedAttention:
         self.centroids = torch.tensor(c_np, dtype=torch.float32, device=device)
         self.boundaries = torch.tensor(b_np[1:-1], dtype=torch.float32, device=device)
 
-        # Precompute Pi^T for rotating queries
         self.Pi_T = self.Pi.T.contiguous()
+
+        self._fused = None
+        if HAS_TRITON and device.type == "cuda" and FusedQuantizedAttentionCUDA is not None:
+            self._fused = FusedQuantizedAttentionCUDA(bit_width, head_dim, device, rotation_seed)
 
     @torch.no_grad()
     def quantize_keys(self, K):
@@ -113,46 +122,35 @@ class QuantizedAttention:
         return x_hat.view(orig_shape)
 
     @torch.no_grad()
-    def quantized_attention_scores(self, Q_tensor, K_idx, K_norms, dtype=torch.float16):
+    def quantized_attention_scores(self, Q_tensor, K_idx, K_norms, dtype=torch.float16,
+                                    use_fused=True):
         """
         Compute scaled attention scores Q @ K_hat^T without full dequantization.
 
-        Math:
-            K_hat_i = norms_i * Pi^T @ centroids[idx_i]     (per key vector)
-            Q @ K_hat^T = Q @ Pi^T @ diag(centroids[idx])^T @ diag(norms)
-                        = (Q @ Pi^T) @ centroids[idx]^T * norms
-
-        Steps:
-            1. Q_rot = Q @ Pi^T                     # (batch, heads, q_len, D)
-            2. C_K = centroids[K_idx]                # (batch, heads, kv_len, D)
-            3. raw = Q_rot @ C_K^T                   # (batch, heads, q_len, kv_len)
-            4. scores = raw * K_norms / sqrt(d)      # scale by norms and attention scale
+        When a Triton fused kernel is available and use_fused=True, delegates to
+        the kernel that never materializes the (kv_len, D) centroid tensor.
+        Otherwise falls back to PyTorch gather + matmul.
 
         Args:
             Q_tensor: (batch, heads, q_len, head_dim) float query
             K_idx:    (batch, heads, kv_len, head_dim) uint8 quantized key indices
             K_norms:  (batch, heads, kv_len) float32 key norms
             dtype:    compute dtype (float16 for speed)
+            use_fused: if True, use Triton kernel when available
 
         Returns:
             scores: (batch, heads, q_len, kv_len) attention scores (pre-softmax)
         """
-        # Step 1: Rotate queries into quantization space
+        if use_fused and self._fused is not None:
+            return self._fused.fused_attention_scores(Q_tensor, K_idx, K_norms)
+
         Q_f32 = Q_tensor.float()
-        Q_rot = Q_f32 @ self.Pi_T  # (B, H, q_len, D)
-
-        # Step 2: Look up centroids for keys (the key operation — loads uint8, maps to float)
-        C_K = self.centroids[K_idx.long()]  # (B, H, kv_len, D)
-
-        # Step 3: Dot product in rotated space
+        Q_rot = Q_f32 @ self.Pi_T
+        C_K = self.centroids[K_idx.long()]
         Q_rot = Q_rot.to(dtype)
         C_K = C_K.to(dtype)
-        raw = torch.matmul(Q_rot, C_K.transpose(-2, -1))  # (B, H, q_len, kv_len)
-
-        # Step 4: Scale by key norms and attention scaling factor
-        # K_norms has shape (B, H, kv_len), broadcast to (B, H, 1, kv_len)
+        raw = torch.matmul(Q_rot, C_K.transpose(-2, -1))
         scores = raw * K_norms.unsqueeze(-2).to(dtype) * self.scale
-
         return scores
 
     @torch.no_grad()

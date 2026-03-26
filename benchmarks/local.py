@@ -199,7 +199,7 @@ def run_benchmark():
             model, tokenizer, msgs, bit_width=4, max_new_tokens=max_new_tokens)),
         ("tq3", "TurboQuant 3-bit (outlier-aware)", lambda msgs: generate_with_turboquant(
             model, tokenizer, msgs, bit_width=3, max_new_tokens=max_new_tokens,
-            num_outlier_channels=8, outlier_bits=4)),
+            num_outlier_channels=16 if head_dim == 64 else 32, outlier_bits=4)),
     ]
 
     all_results = {}

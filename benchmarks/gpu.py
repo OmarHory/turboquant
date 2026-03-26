@@ -5,14 +5,11 @@ Spins up a GPU pod, runs the benchmark, prints results, and terminates the pod.
 No lingering workers, no surprise charges.
 
 Usage:
-    # Add your keys to .env (copy from .env.example)
-    cp .env.example .env
-
-    # Run (defaults to RTX 4090, cheapest option)
-    python benchmark_gpu.py
-
-    # Or pick a GPU
-    python benchmark_gpu.py --gpu a100
+    python -m benchmarks.gpu                          # SmolLM2 on A40
+    python -m benchmarks.gpu --model llama-8b         # Llama-3.1-8B-Instruct on A40
+    python -m benchmarks.gpu --model mistral-7b       # Mistral-7B-Instruct-v0.3 on A40
+    python -m benchmarks.gpu --gpu a100               # A100 GPU
+    python -m benchmarks.gpu --model llama-8b --gpu a100  # Llama-8B on A100
 """
 
 import argparse
@@ -26,19 +23,19 @@ import requests
 
 
 def load_dotenv():
-    env_path = Path(__file__).parent / ".env"
-    if not env_path.exists():
-        return
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    for env_path in [Path(__file__).parent.parent / ".env", Path(__file__).parent / ".env"]:
+        if not env_path.exists():
             continue
-        if "=" in line:
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip("'\"")
-            if key and key not in os.environ:
-                os.environ[key] = value
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip("'\"")
+                if key and key not in os.environ:
+                    os.environ[key] = value
 
 
 load_dotenv()
@@ -54,20 +51,37 @@ GPU_MAP = {
     "a40": "NVIDIA A40",
 }
 
+MODEL_MAP = {
+    "smollm": {
+        "hf_id": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+        "short": "SmolLM2-1.7B",
+        "min_gpu_gb": 8,
+    },
+    "llama-8b": {
+        "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
+        "short": "Llama-3.1-8B",
+        "min_gpu_gb": 24,
+    },
+    "mistral-7b": {
+        "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+        "short": "Mistral-7B",
+        "min_gpu_gb": 24,
+    },
+}
+
 BENCHMARK_SCRIPT = r'''
 import time, math, gc, json, sys, os
 import torch
 import numpy as np
 from scipy.stats import norm
 
-print("=== TurboQuant GPU Benchmark (CUDA) ===", flush=True)
+MODEL = os.environ.get("BENCH_MODEL", "HuggingFaceTB/SmolLM2-1.7B-Instruct")
+print(f"=== TurboQuant GPU Benchmark (CUDA) ===", flush=True)
 print(f"GPU: {torch.cuda.get_device_name(0)}", flush=True)
 print(f"CUDA: {torch.version.cuda}", flush=True)
 print(f"PyTorch: {torch.__version__}", flush=True)
+print(f"Model: {MODEL}", flush=True)
 
-# ── TurboQuant Core (GPU-optimized) ──────────────────────────────────
-# All matmul ops run as CUDA kernels via PyTorch.
-# Key optimization: cache dequantized history, only dequantize new tokens.
 
 def _lloyd_max_gaussian(num_levels, sigma=1.0, max_iter=200):
     k = num_levels
@@ -110,7 +124,6 @@ class TurboQuantMSE:
 
     @torch.no_grad()
     def quantize(self, x):
-        """x: (..., D) raw vectors. Returns (idx, norms)."""
         flat = x.float().reshape(-1, self.head_dim)
         norms = flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
         y = (flat / norms) @ self.Pi.T
@@ -119,7 +132,6 @@ class TurboQuantMSE:
 
     @torch.no_grad()
     def dequantize(self, idx, norms):
-        """idx: (..., D) uint8 indices, norms: (...) float32. Returns (..., D) float32."""
         flat_idx = idx.reshape(-1, self.head_dim)
         y_hat = self.centroids[flat_idx.long()]
         x_hat = y_hat @ self.Pi
@@ -127,50 +139,87 @@ class TurboQuantMSE:
         return x_hat.view(idx.shape)
 
 
-# ── KV Cache (optimized: incremental dequantize) ─────────────────────
-
 from transformers.cache_utils import DynamicCache, DynamicLayer
 
 class TQLayer(DynamicLayer):
-    def __init__(self, hd, bw, dev):
+    def __init__(self, hd, bw, dev, num_outlier_ch=0, outlier_bw=0):
         super().__init__()
-        self._tq = TurboQuantMSE(bw, hd, dev)
-        self._hd, self._bw = hd, bw
-        self._idx_k, self._norms_k, self._shapes_k = [], [], []
-        self._idx_v, self._norms_v, self._shapes_v = [], [], []
+        self._bw = bw
+        self._hd = hd
+        self._outlier_ch = num_outlier_ch
+        self._outlier_bw = outlier_bw
+
+        regular_dim = hd - num_outlier_ch if num_outlier_ch > 0 and outlier_bw > bw else hd
+        self._regular_dim = regular_dim
+        self._outlier_dim = num_outlier_ch if num_outlier_ch > 0 and outlier_bw > bw else 0
+
+        self._tq = TurboQuantMSE(bw, regular_dim, dev)
+        self._tq_out = TurboQuantMSE(outlier_bw, num_outlier_ch, dev, rotation_seed=43) if self._outlier_dim > 0 else None
+
+        self._key_data, self._val_data = [], []
         self._ck = self._cv = None
+        self._channel_mask = None
 
     def lazy_initialization(self, ks, vs):
         self.dtype, self.device, self.is_initialized = ks.dtype, ks.device, True
+        if self._tq_out is not None and self._channel_mask is None:
+            rms = ks.float().pow(2).mean(dim=(0,1,2)).sqrt()
+            _, top = rms.topk(min(self._outlier_ch, rms.shape[0]))
+            self._channel_mask = torch.zeros(rms.shape[0], dtype=torch.bool, device=ks.device)
+            self._channel_mask[top] = True
 
-    def _dq_one(self, idx, norms, shape):
-        return self._tq.dequantize(idx, norms).reshape(shape).to(self.dtype)
+    def _quant(self, x):
+        shape = x.shape
+        if self._tq_out is not None and self._channel_mask is not None:
+            reg_mask = ~self._channel_mask
+            xf = x.float()
+            r = xf[..., reg_mask].reshape(-1, self._regular_dim)
+            rn = r.norm(dim=-1, keepdim=True).clamp(min=1e-10)
+            ri = self._tq.quantize(r / rn)[0]
+            o = xf[..., self._channel_mask].reshape(-1, self._outlier_dim)
+            on = o.norm(dim=-1, keepdim=True).clamp(min=1e-10)
+            oi = self._tq_out.quantize(o / on)[0]
+            return {'ri': ri, 'rn': rn.squeeze(-1), 'oi': oi, 'on': on.squeeze(-1), 's': shape}
+        flat = x.float().reshape(-1, self._hd)
+        norms = flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
+        idx, _ = self._tq.quantize(flat / norms)
+        return {'idx': idx, 'norms': norms.squeeze(-1), 's': shape}
+
+    def _dequant_one(self, d):
+        shape = d['s']
+        if 'ri' in d:
+            r_hat = self._tq.dequantize(d['ri'], d['rn']).reshape(shape[0], shape[1], shape[2], self._regular_dim)
+            o_hat = self._tq_out.dequantize(d['oi'], d['on']).reshape(shape[0], shape[1], shape[2], self._outlier_dim)
+            out = torch.zeros(shape, dtype=torch.float32, device=self.device)
+            out[..., ~self._channel_mask] = r_hat
+            out[..., self._channel_mask] = o_hat
+            return out.to(self.dtype)
+        return self._tq.dequantize(d['idx'], d['norms']).reshape(shape).to(self.dtype)
 
     def update(self, ks, vs, cache_kwargs=None):
         if not self.is_initialized: self.lazy_initialization(ks, vs)
-
-        ki, kn = self._tq.quantize(ks)
-        self._idx_k.append(ki); self._norms_k.append(kn); self._shapes_k.append(ks.shape)
-        vi, vn = self._tq.quantize(vs)
-        self._idx_v.append(vi); self._norms_v.append(vn); self._shapes_v.append(vs.shape)
-
-        new_k = self._dq_one(ki, kn, ks.shape)
-        new_v = self._dq_one(vi, vn, vs.shape)
-
+        kd = self._quant(ks); self._key_data.append(kd)
+        vd = self._quant(vs); self._val_data.append(vd)
+        nk = self._dequant_one(kd)
+        nv = self._dequant_one(vd)
         if self._ck is None:
-            self._ck, self._cv = new_k, new_v
+            self._ck, self._cv = nk, nv
         else:
-            self._ck = torch.cat([self._ck, new_k], dim=-2)
-            self._cv = torch.cat([self._cv, new_v], dim=-2)
+            self._ck = torch.cat([self._ck, nk], dim=-2)
+            self._cv = torch.cat([self._cv, nv], dim=-2)
         return self._ck, self._cv
 
     def get_seq_length(self):
-        return sum(s[-2] for s in self._shapes_k) if self._shapes_k else 0
+        return sum(d['s'][-2] for d in self._key_data) if self._key_data else 0
     def get_max_cache_shape(self): return -1
     def mem_bits(self):
         t = 0
-        for idx, norms in zip(self._idx_k + self._idx_v, self._norms_k + self._norms_v):
-            t += idx.numel() * self._bw + norms.numel() * 32
+        for d in self._key_data + self._val_data:
+            if 'ri' in d:
+                t += d['ri'].numel() * self._bw + d['oi'].numel() * self._outlier_bw
+                t += (d['rn'].numel() + d['on'].numel()) * 32
+            else:
+                t += d['idx'].numel() * self._bw + d['norms'].numel() * 32
         return t
 
     @property
@@ -184,11 +233,17 @@ class TQLayer(DynamicLayer):
 
 
 class TQCache(DynamicCache):
-    def __init__(self, hd, bw, nl, dev):
+    def __init__(self, hd, bw, nl, dev, num_outlier_ch=0, outlier_bw=0):
         super().__init__()
-        self.layers = [TQLayer(hd, bw, dev) for _ in range(nl)]
+        self.layers = [TQLayer(hd, bw, dev, num_outlier_ch, outlier_bw) for _ in range(nl)]
     def mem_bits(self):
         return sum(l.mem_bits() for l in self.layers)
+    def eff_bits(self):
+        layer = self.layers[0]
+        if layer._outlier_dim > 0:
+            hd = layer._hd
+            return (layer._regular_dim * layer._bw + layer._outlier_dim * layer._outlier_bw) / hd
+        return float(layer._bw)
 
 
 def bl_kv_mem(cache):
@@ -201,12 +256,9 @@ def bl_kv_mem(cache):
     return t
 
 
-# ── Benchmark ────────────────────────────────────────────────────────
-
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 hf_token = os.environ.get("HF_TOKEN", None)
-MODEL = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
 device = torch.device("cuda")
 gpu_name = torch.cuda.get_device_name(0)
 
@@ -223,7 +275,7 @@ hd = model.config.hidden_size // model.config.num_attention_heads
 nl = model.config.num_hidden_layers
 nh = model.config.num_key_value_heads
 nparams = round(sum(p.numel() for p in model.parameters())/1e9, 2)
-print(f"Model loaded: {nparams}B params, {nl} layers, {nh} heads, head_dim={hd}", flush=True)
+print(f"Model loaded: {nparams}B params, {nl} layers, {nh} KV heads, head_dim={hd}", flush=True)
 
 results = {
     "gpu": gpu_name, "model": MODEL,
@@ -232,7 +284,7 @@ results = {
 
 prompts = [
     ("Factual QA", "What is the capital of France? Answer in one sentence."),
-    ("Reasoning", "If a train travels at 60 mph for 2.5 hours, how far does it go?"),
+    ("Reasoning", "If a train travels at 60 mph for 2.5 hours, how far does it go? Show your reasoning."),
     ("Code Generation", "Write a Python function to compute factorial recursively."),
 ]
 
@@ -243,7 +295,7 @@ def generate(msgs, cache=None):
     t0 = time.time()
     with torch.no_grad():
         kw = dict(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"],
-                  max_new_tokens=60, do_sample=False, use_cache=True, return_dict_in_generate=True)
+                  max_new_tokens=100, do_sample=False, use_cache=True, return_dict_in_generate=True)
         if cache is not None: kw["past_key_values"] = cache
         out = model.generate(**kw)
     torch.cuda.synchronize()
@@ -258,25 +310,30 @@ def generate(msgs, cache=None):
         "peak_gpu_mb": round(torch.cuda.max_memory_allocated()/1e6, 1),
     }
 
-for cfg, label, cfn in [
+outlier_ch = 32 if hd == 128 else (16 if hd == 64 else 0)
+
+configs = [
     ("baseline", "Baseline FP16", lambda: None),
-    ("tq4", "TurboQuant 4-bit", lambda: TQCache(hd,4,nl,device)),
-    ("tq3", "TurboQuant 3-bit", lambda: TQCache(hd,3,nl,device)),
-]:
+    ("tq4", "TurboQuant 4-bit", lambda: TQCache(hd, 4, nl, device)),
+    ("tq3.5", "TurboQuant 3.5-bit (outlier)", lambda: TQCache(hd, 3, nl, device, outlier_ch, 4)),
+    ("tq3", "TurboQuant 3-bit", lambda: TQCache(hd, 3, nl, device)),
+    ("tq2.5", "TurboQuant 2.5-bit (outlier)", lambda: TQCache(hd, 2, nl, device, outlier_ch, 3)),
+]
+
+for cfg_key, label, cfn in configs:
     print(f"\nRunning {label}...", flush=True)
-    results[cfg] = []
+    results[cfg_key] = []
     for name, content in prompts:
-        r = generate([{"role":"user","content":content}], cfn())
-        r["prompt"] = name
-        results[cfg].append(r)
-        print(f"  {name}: {r['tps']} tok/s, {r['tokens']} tokens", flush=True)
+        try:
+            r = generate([{"role":"user","content":content}], cfn())
+            r["prompt"] = name
+            results[cfg_key].append(r)
+            print(f"  {name}: {r['tps']} tok/s, KV={r['kv_memory']} bytes", flush=True)
+        except Exception as e:
+            print(f"  {name}: ERROR — {e}", flush=True)
+            results[cfg_key].append({"prompt": name, "error": str(e)})
         gc.collect(); torch.cuda.empty_cache()
 
-# ── Quantized Attention (skip full dequantize for Q @ K^T) ────────────
-#
-# Standard:    K_hat = centroids[idx] @ Pi  ->  Q @ K_hat^T
-# Quantized:   Q_rot = Q @ Pi^T  ->  Q_rot @ centroids[idx]^T * norms
-# The win: reads uint8 indices from HBM instead of float16 keys.
 
 class QuantizedAttention:
     def __init__(self, bit_width, head_dim, device, rotation_seed=42):
@@ -327,11 +384,9 @@ speedup = {}
 for sl in [512, 1024, 2048, 4096, 8192, 16384]:
     Qf = torch.randn(1, nh, 1, d, dtype=torch.float16, device=device)
     Kf = torch.randn(1, nh, sl, d, dtype=torch.float16, device=device)
-
     qa = QuantizedAttention(4, d, device)
     K_idx, K_norms = qa.quantize_keys(Kf)
 
-    # Baseline: standard Q @ K^T
     for _ in range(WARMUP): _ = torch.matmul(Qf, Kf.transpose(-2,-1))
     t0e = torch.cuda.Event(enable_timing=True)
     t1e = torch.cuda.Event(enable_timing=True)
@@ -340,7 +395,6 @@ for sl in [512, 1024, 2048, 4096, 8192, 16384]:
     t1e.record(); torch.cuda.synchronize()
     baseline_ms = t0e.elapsed_time(t1e) / ITERS
 
-    # Old: dequantize then matmul
     for _ in range(WARMUP):
         Kd = qa.dequantize(K_idx, K_norms).reshape(1,nh,sl,d).half()
         _ = torch.matmul(Qf, Kd.transpose(-2,-1))
@@ -351,7 +405,6 @@ for sl in [512, 1024, 2048, 4096, 8192, 16384]:
     t1e.record(); torch.cuda.synchronize()
     dequant_ms = t0e.elapsed_time(t1e) / ITERS
 
-    # New: quantized attention (no full dequantize)
     for _ in range(WARMUP): _ = qa.quantized_attention_scores(Qf, K_idx, K_norms)
     t0e.record()
     for _ in range(ITERS): _ = qa.quantized_attention_scores(Qf, K_idx, K_norms)
@@ -369,6 +422,7 @@ for sl in [512, 1024, 2048, 4096, 8192, 16384]:
     print(f"  seq_len={sl}: baseline={baseline_ms:.3f}ms  dequant+mm={dequant_ms:.3f}ms  "
           f"quant_attn={qattn_ms:.3f}ms  speedup_vs_base={entry['speedup_vs_baseline']:.2f}x  "
           f"speedup_vs_dequant={entry['speedup_vs_dequant']:.2f}x", flush=True)
+    del Qf, Kf, K_idx, K_norms; gc.collect(); torch.cuda.empty_cache()
 
 results["attention_speedup"] = speedup
 
@@ -412,7 +466,7 @@ def create_pod(gpu_type: str, hf_token: str):
         "imageName": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
         "gpuTypeIds": [gpu_type],
         "gpuCount": 1,
-        "containerDiskInGb": 20,
+        "containerDiskInGb": 30,
         "volumeInGb": 0,
         "ports": ["22/tcp"],
         "env": {"PUBLIC_KEY": pubkey},
@@ -433,16 +487,13 @@ def wait_for_pod(pod_id: str, timeout=300):
     while time.time() - start < timeout:
         r = api("get", f"/pods/{pod_id}")
         pod = r.json()
-
         public_ip = pod.get("publicIp")
         port_mappings = pod.get("portMappings", {})
-
         if public_ip and port_mappings and "22" in port_mappings:
             ssh_addr = f"{public_ip}:{port_mappings['22']}"
             print(f" ready! ({int(time.time()-start)}s)")
             print(f"  SSH: {ssh_addr}")
             return ssh_addr
-
         print(".", end="", flush=True)
         time.sleep(5)
     print(" TIMEOUT!")
@@ -459,8 +510,7 @@ def terminate_pod(pod_id: str):
         print(f"  MANUALLY TERMINATE at: https://www.runpod.io/console/pods")
 
 
-def run_benchmark(ssh_addr: str, hf_token: str):
-    """Upload and run the benchmark script via SSH."""
+def run_benchmark(ssh_addr: str, hf_token: str, model_hf_id: str):
     import subprocess
     import base64
 
@@ -491,8 +541,12 @@ def run_benchmark(ssh_addr: str, hf_token: str):
     install = ssh_base + ["pip install -q transformers accelerate sentencepiece protobuf scipy numpy 2>&1 | tail -3"]
     subprocess.run(install)
 
-    env_prefix = f"HF_TOKEN={hf_token} " if hf_token else ""
-    print("  Running benchmark (this takes 2-4 minutes)...")
+    env_parts = [f"BENCH_MODEL={model_hf_id}"]
+    if hf_token:
+        env_parts.append(f"HF_TOKEN={hf_token}")
+    env_prefix = " ".join(env_parts) + " "
+
+    print("  Running benchmark (this takes 3-8 minutes for 7-8B models)...")
     print("  " + "=" * 60)
     run_cmd = ssh_base + [f"{env_prefix}python /workspace/bench.py"]
     ret = subprocess.run(run_cmd)
@@ -501,7 +555,8 @@ def run_benchmark(ssh_addr: str, hf_token: str):
         print("  Benchmark script returned non-zero exit code.")
 
     print("  Downloading results...")
-    results_local = Path(__file__).parent / "benchmark_results.json"
+    results_local = Path(__file__).parent.parent / "results" / "benchmark_results.json"
+    results_local.parent.mkdir(parents=True, exist_ok=True)
     scp_cmd = scp_base + [f"root@{host}:/workspace/results.json", str(results_local)]
     subprocess.run(scp_cmd, capture_output=True)
 
@@ -511,16 +566,16 @@ def run_benchmark(ssh_addr: str, hf_token: str):
 
 
 def print_results(results: dict):
-    print(f"\n{'=' * 85}")
+    print(f"\n{'=' * 95}")
     print(f"  TurboQuant GPU Benchmark Results")
     print(f"  GPU: {results['gpu']}")
     print(f"  Model: {results['model']} ({results['model_config']['params_B']}B params)")
     cfg = results['model_config']
-    print(f"  Config: {cfg['layers']} layers, {cfg['heads']} heads, head_dim={cfg['head_dim']}")
-    print(f"{'=' * 85}\n")
+    print(f"  Config: {cfg['layers']} layers, {cfg['heads']} KV heads, head_dim={cfg['head_dim']}")
+    print(f"{'=' * 95}\n")
 
     def avg(k, f):
-        items = results.get(k, [])
+        items = [r for r in results.get(k, []) if "error" not in r]
         return sum(r[f] for r in items) / len(items) if items else 0
 
     def fmt(b):
@@ -528,54 +583,76 @@ def print_results(results: dict):
         if b < 1024**2: return f"{b/1024:.1f} KB"
         return f"{b/1024**2:.2f} MB"
 
-    col = 22
-    hdr = f"{'Metric':<28} | {'Baseline (FP16)':>{col}} | {'TurboQuant 4-bit':>{col}} | {'TurboQuant 3-bit':>{col}}"
+    config_keys = [k for k in ["baseline", "tq4", "tq3.5", "tq3", "tq2.5"] if k in results]
+
+    col = 18
+    labels = {"baseline": "Baseline FP16", "tq4": "TQ 4-bit", "tq3.5": "TQ 3.5-bit",
+              "tq3": "TQ 3-bit", "tq2.5": "TQ 2.5-bit"}
+    hdr = f"{'Metric':<22} | " + " | ".join(f"{labels.get(k,k):>{col}}" for k in config_keys)
     print(hdr)
     print("-" * len(hdr))
 
-    bm, t4, t3 = avg("baseline","kv_memory"), avg("tq4","kv_memory"), avg("tq3","kv_memory")
-    print(f"{'Avg KV Cache Memory':<28} | {fmt(bm):>{col}} | {fmt(t4):>{col}} | {fmt(t3):>{col}}")
-    if bm > 0:
-        r4 = bm/t4 if t4>0 else float('inf')
-        r3 = bm/t3 if t3>0 else float('inf')
-        print(f"{'Compression Ratio':<28} | {'1.0x':>{col}} | {f'{r4:.1f}x':>{col}} | {f'{r3:.1f}x':>{col}}")
-    print(f"{'Avg Tokens/sec':<28} | {avg('baseline','tps'):>{col}.1f} | {avg('tq4','tps'):>{col}.1f} | {avg('tq3','tps'):>{col}.1f}")
-    print(f"{'Avg Gen Time (s)':<28} | {avg('baseline','time'):>{col}.2f} | {avg('tq4','time'):>{col}.2f} | {avg('tq3','time'):>{col}.2f}")
-    print(f"{'Avg Peak GPU (MB)':<28} | {avg('baseline','peak_gpu_mb'):>{col}.0f} | {avg('tq4','peak_gpu_mb'):>{col}.0f} | {avg('tq3','peak_gpu_mb'):>{col}.0f}")
+    bm = avg("baseline", "kv_memory")
+    mem_row = f"{'Avg KV Cache Memory':<22} | "
+    mem_row += " | ".join(f"{fmt(avg(k, 'kv_memory')):>{col}}" for k in config_keys)
+    print(mem_row)
 
-    print(f"\n{'=' * 85}")
+    if bm > 0:
+        ratio_row = f"{'Compression Ratio':<22} | "
+        for k in config_keys:
+            m = avg(k, "kv_memory")
+            r = bm / m if m > 0 else float('inf')
+            ratio_row += f"{f'{r:.1f}x':>{col}} | "
+        print(ratio_row.rstrip(" | "))
+
+    tps_row = f"{'Avg Tokens/sec':<22} | "
+    tps_row += " | ".join(f"{avg(k, 'tps'):>{col}.1f}" for k in config_keys)
+    print(tps_row)
+
+    peak_row = f"{'Avg Peak GPU (MB)':<22} | "
+    peak_row += " | ".join(f"{avg(k, 'peak_gpu_mb'):>{col}.0f}" for k in config_keys)
+    print(peak_row)
+
+    print(f"\n{'=' * 95}")
     print(f"  GENERATION COMPARISON")
-    print(f"{'=' * 85}")
-    for i, bl in enumerate(results.get("baseline", [])):
+    print(f"{'=' * 95}")
+    baseline_items = results.get("baseline", [])
+    for i, bl in enumerate(baseline_items):
+        if "error" in bl:
+            continue
         print(f"\n--- {bl['prompt']} ---")
-        for key, label in [("baseline","Baseline FP16"),("tq4","TQ 4-bit"),("tq3","TQ 3-bit")]:
+        for key in config_keys:
             items = results.get(key, [])
-            if i < len(items):
+            if i < len(items) and "error" not in items[i]:
                 t = items[i]["text"].strip()[:200]
-                print(f"  [{label}] ({items[i]['tokens']} tok, {items[i]['tps']} tok/s): {t}")
+                print(f"  [{labels.get(key,key)}] ({items[i]['tokens']} tok, {items[i]['tps']} tok/s): {t}")
 
     if "attention_speedup" in results:
-        print(f"\n{'=' * 85}")
+        print(f"\n{'=' * 95}")
         print(f"  QUANTIZED ATTENTION SPEEDUP (GPU)")
-        print(f"{'=' * 85}")
+        print(f"{'=' * 95}")
         hdr = f"  {'SeqLen':>8} | {'Baseline':>10} | {'Dequant+MM':>12} | {'Quant Attn':>12} | {'vs Base':>8} | {'vs Dequant':>10}"
         print(hdr)
         print("  " + "-" * (len(hdr) - 2))
         for sl, d in sorted(results["attention_speedup"].items(), key=lambda x: int(x[0])):
-            bms = d.get('baseline_ms', d.get('baseline_ms', 0))
-            dms = d.get('dequant_then_matmul_ms', d.get('tq4_ms', 0))
+            bms = d.get('baseline_ms', 0)
+            dms = d.get('dequant_then_matmul_ms', 0)
             qms = d.get('quantized_attn_ms', dms)
-            svb = d.get('speedup_vs_baseline', d.get('ratio', 0))
+            svb = d.get('speedup_vs_baseline', 0)
             svd = d.get('speedup_vs_dequant', 0)
             print(f"  {sl:>8} | {bms:>9.3f}ms | {dms:>11.3f}ms | {qms:>11.3f}ms | {svb:>7.2f}x | {svd:>9.2f}x")
 
 
 def main():
     parser = argparse.ArgumentParser(description="TurboQuant GPU Benchmark (RunPod)")
-    parser.add_argument("--gpu", default="4090", choices=list(GPU_MAP.keys()),
-                        help="GPU type (default: 4090)")
+    parser.add_argument("--gpu", default="a40", choices=list(GPU_MAP.keys()),
+                        help="GPU type (default: a40)")
+    parser.add_argument("--model", default="smollm", choices=list(MODEL_MAP.keys()),
+                        help="Model to benchmark (default: smollm)")
     args = parser.parse_args()
+
     gpu_type = GPU_MAP[args.gpu]
+    model_info = MODEL_MAP[args.model]
 
     if not os.environ.get("RUNPOD_API_KEY"):
         print("Error: RUNPOD_API_KEY not found.")
@@ -588,7 +665,7 @@ def main():
     print(f"{'=' * 60}")
     print(f"  TurboQuant GPU Benchmark")
     print(f"  GPU: {args.gpu} ({gpu_type})")
-    print(f"  Model: SmolLM2-1.7B-Instruct")
+    print(f"  Model: {model_info['short']} ({model_info['hf_id']})")
     print(f"{'=' * 60}\n")
 
     pod_id = None
@@ -602,10 +679,17 @@ def main():
 
         time.sleep(10)
 
-        results = run_benchmark(ssh_addr, hf_token)
-        if results:
-            print_results(results)
-            print(f"\n  Results saved to benchmark_results.json")
+        r = run_benchmark(ssh_addr, hf_token, model_info["hf_id"])
+        if r:
+            print_results(r)
+
+            model_slug = model_info["short"].lower().replace(".", "").replace("-", "_")
+            gpu_slug = args.gpu.replace("-", "_")
+            results_dir = Path(__file__).parent.parent / "results"
+            results_dir.mkdir(parents=True, exist_ok=True)
+            out_path = results_dir / f"{gpu_slug}_{model_slug}.json"
+            out_path.write_text(json.dumps(r, indent=2, default=str))
+            print(f"\n  Results saved to {out_path.relative_to(Path(__file__).parent.parent)}")
         else:
             print("  No results returned. Check logs above.")
 
@@ -613,11 +697,6 @@ def main():
         if pod_id:
             terminate_pod(pod_id)
             print("\n  Pod terminated. No lingering charges.")
-
-    # Cleanup temp file
-    tmp = Path(__file__).parent / "_gpu_bench_remote.py"
-    if tmp.exists():
-        tmp.unlink()
 
 
 if __name__ == "__main__":

@@ -14,7 +14,15 @@ from turboquant.core import (
     compute_inner_product_error,
     compute_memory_bytes,
 )
-from turboquant.cache import TurboQuantCache, TurboQuantLayer, get_baseline_kv_memory
+from turboquant.cache import (
+    TurboQuantCache,
+    TurboQuantLayer,
+    TQLayerFused,
+    get_baseline_kv_memory,
+    detect_outlier_channels,
+    effective_bit_width,
+)
+from turboquant.packing import pack_indices, unpack_indices, packed_size_bytes, compression_ratio
 from turboquant.attention import QuantizedAttention
 
 __all__ = [
@@ -24,9 +32,16 @@ __all__ = [
     "TurboQuantProd",
     "TurboQuantCache",
     "TurboQuantLayer",
+    "TQLayerFused",
     "QuantizedAttention",
     "get_baseline_kv_memory",
+    "detect_outlier_channels",
+    "effective_bit_width",
     "compute_mse",
     "compute_inner_product_error",
     "compute_memory_bytes",
+    "pack_indices",
+    "unpack_indices",
+    "packed_size_bytes",
+    "compression_ratio",
 ]

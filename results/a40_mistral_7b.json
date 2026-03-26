@@ -1,0 +1,199 @@
+{
+  "gpu": "NVIDIA A40",
+  "model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "model_config": {
+    "layers": 32,
+    "heads": 8,
+    "head_dim": 128,
+    "params_B": 7.25
+  },
+  "baseline": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.942,
+      "tps": 8.5,
+      "kv_memory": 3014656,
+      "peak_gpu_mb": 14508.6,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
+      "tokens": 79,
+      "time": 2.702,
+      "tps": 29.2,
+      "kv_memory": 14286848,
+      "peak_gpu_mb": 14520.8,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n```\n\nIn this function, `n` is the number for which you want to compute the factorial. If `n` is 0, the function returns 1",
+      "tokens": 100,
+      "time": 3.428,
+      "tps": 29.2,
+      "kv_memory": 14942208,
+      "peak_gpu_mb": 14521.6,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq4": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.389,
+      "tps": 20.6,
+      "kv_memory": 800768,
+      "peak_gpu_mb": 14512.0,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
+      "tokens": 79,
+      "time": 3.146,
+      "tps": 25.1,
+      "kv_memory": 3794944,
+      "peak_gpu_mb": 14532.7,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n\nFor example, calling `factorial(5)` will return `120`.\n\nHowever, it's important to note that this function can lead to a stack",
+      "tokens": 100,
+      "time": 3.831,
+      "tps": 26.1,
+      "kv_memory": 3969024,
+      "peak_gpu_mb": 14534.4,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq3.5": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.657,
+      "tps": 12.2,
+      "kv_memory": 706560,
+      "peak_gpu_mb": 14511.8,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nSo, the train goes 150 miles.",
+      "tokens": 81,
+      "time": 6.293,
+      "tps": 12.9,
+      "kv_memory": 3409920,
+      "peak_gpu_mb": 14537.8,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n```\n\nIn this function, the base case is when `n` is 0, in which case the function returns 1. For any other number, it calls itself",
+      "tokens": 100,
+      "time": 7.799,
+      "tps": 12.8,
+      "kv_memory": 3502080,
+      "peak_gpu_mb": 14540.3,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq3": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.319,
+      "tps": 25.1,
+      "kv_memory": 612352,
+      "peak_gpu_mb": 14512.0,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nSo, the train goes 150 miles.",
+      "tokens": 80,
+      "time": 3.031,
+      "tps": 26.4,
+      "kv_memory": 2928640,
+      "peak_gpu_mb": 14533.0,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function works by checking if the input number `n` is 0. If it is, it returns 1 (since the factorial of 0 is 1",
+      "tokens": 100,
+      "time": 3.824,
+      "tps": 26.2,
+      "kv_memory": 3035136,
+      "peak_gpu_mb": 14534.4,
+      "prompt": "Code Generation"
+    }
+  ],
+  "tq2.5": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.63,
+      "tps": 12.7,
+      "kv_memory": 518144,
+      "peak_gpu_mb": 14511.8,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = Speed * Time\nDistance = 60 mph * 2.5 hours\n\nMultiply the speed by the time to get the distance:\n\nDistance = 150 miles\n\nSo, the train goes 1",
+      "tokens": 100,
+      "time": 7.926,
+      "tps": 12.6,
+      "kv_memory": 2928640,
+      "peak_gpu_mb": 14544.8,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number recursively:\n\n```python\ndef factorial(n):\n    if n == 1:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function uses recursion to calculate the factorial of a number. If the input number `n` is 1, it returns 1 (since the factorial of ",
+      "tokens": 100,
+      "time": 7.643,
+      "tps": 13.1,
+      "kv_memory": 2568192,
+      "peak_gpu_mb": 14540.3,
+      "prompt": "Code Generation"
+    }
+  ],
+  "attention_speedup": {
+    "512": {
+      "baseline_ms": 0.0211,
+      "dequant_then_matmul_ms": 0.0952,
+      "quantized_attn_ms": 0.1199,
+      "speedup_vs_baseline": 0.18,
+      "speedup_vs_dequant": 0.79
+    },
+    "1024": {
+      "baseline_ms": 0.0217,
+      "dequant_then_matmul_ms": 0.0986,
+      "quantized_attn_ms": 0.1205,
+      "speedup_vs_baseline": 0.18,
+      "speedup_vs_dequant": 0.82
+    },
+    "2048": {
+      "baseline_ms": 0.0213,
+      "dequant_then_matmul_ms": 0.1966,
+      "quantized_attn_ms": 0.1355,
+      "speedup_vs_baseline": 0.16,
+      "speedup_vs_dequant": 1.45
+    },
+    "4096": {
+      "baseline_ms": 0.0218,
+      "dequant_then_matmul_ms": 0.3775,
+      "quantized_attn_ms": 0.2489,
+      "speedup_vs_baseline": 0.09,
+      "speedup_vs_dequant": 1.52
+    },
+    "8192": {
+      "baseline_ms": 0.0319,
+      "dequant_then_matmul_ms": 0.7279,
+      "quantized_attn_ms": 0.4671,
+      "speedup_vs_baseline": 0.07,
+      "speedup_vs_dequant": 1.56
+    },
+    "16384": {
+      "baseline_ms": 0.0595,
+      "dequant_then_matmul_ms": 1.4255,
+      "quantized_attn_ms": 0.8999,
+      "speedup_vs_baseline": 0.07,
+      "speedup_vs_dequant": 1.58
+    }
+  }
+}
