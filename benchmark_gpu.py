@@ -272,35 +272,104 @@ for cfg, label, cfn in [
         print(f"  {name}: {r['tps']} tok/s, {r['tokens']} tokens", flush=True)
         gc.collect(); torch.cuda.empty_cache()
 
-# Attention speedup (raw CUDA matmul benchmark)
-print("\nAttention speedup benchmark...", flush=True)
-speedup = {}
+# ── Quantized Attention (skip full dequantize for Q @ K^T) ────────────
+#
+# Standard:    K_hat = centroids[idx] @ Pi  ->  Q @ K_hat^T
+# Quantized:   Q_rot = Q @ Pi^T  ->  Q_rot @ centroids[idx]^T * norms
+# The win: reads uint8 indices from HBM instead of float16 keys.
+
+class QuantizedAttention:
+    def __init__(self, bit_width, head_dim, device, rotation_seed=42):
+        self.bit_width = bit_width
+        self.head_dim = head_dim
+        self.device = device
+        self.scale = 1.0 / math.sqrt(head_dim)
+        d = head_dim
+        gen = torch.Generator(device="cpu").manual_seed(rotation_seed)
+        G = torch.randn(d, d, generator=gen, dtype=torch.float32)
+        Q, R = torch.linalg.qr(G)
+        ds = torch.sign(torch.diag(R)); ds[ds==0] = 1.0
+        self.Pi = (Q * ds.unsqueeze(0)).to(device)
+        self.Pi_T = self.Pi.T.contiguous()
+        sigma = 1.0 / math.sqrt(d)
+        c_np, b_np = _lloyd_max_gaussian(2**bit_width, sigma=sigma)
+        self.centroids = torch.tensor(c_np, dtype=torch.float32, device=device)
+        self.boundaries = torch.tensor(b_np[1:-1], dtype=torch.float32, device=device)
+
+    @torch.no_grad()
+    def quantize_keys(self, K):
+        flat = K.float().reshape(-1, self.head_dim)
+        norms = flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
+        y = (flat / norms) @ self.Pi_T
+        idx = torch.bucketize(y, self.boundaries).to(torch.uint8)
+        return idx.view(K.shape), norms.squeeze(-1).view(K.shape[:-1])
+
+    @torch.no_grad()
+    def dequantize(self, idx, norms):
+        flat_idx = idx.reshape(-1, self.head_dim)
+        y_hat = self.centroids[flat_idx.long()]
+        x_hat = y_hat @ self.Pi
+        x_hat = x_hat * norms.reshape(-1, 1)
+        return x_hat.view(idx.shape)
+
+    @torch.no_grad()
+    def quantized_attention_scores(self, Qf, K_idx, K_norms, dtype=torch.float16):
+        Q_rot = (Qf.float() @ self.Pi_T).to(dtype)
+        C_K = self.centroids[K_idx.long()].to(dtype)
+        raw = torch.matmul(Q_rot, C_K.transpose(-2, -1))
+        return raw * K_norms.unsqueeze(-2).to(dtype) * self.scale
+
+print("\n=== Quantized Attention Speedup Benchmark ===", flush=True)
+WARMUP, ITERS = 20, 500
 d = hd
-for sl in [512, 2048]:
+speedup = {}
+
+for sl in [512, 1024, 2048, 4096, 8192, 16384]:
     Qf = torch.randn(1, nh, 1, d, dtype=torch.float16, device=device)
     Kf = torch.randn(1, nh, sl, d, dtype=torch.float16, device=device)
 
-    for _ in range(5): _ = torch.matmul(Qf, Kf.transpose(-2,-1))
-    torch.cuda.synchronize(); t0 = time.time()
-    for _ in range(200): _ = torch.matmul(Qf, Kf.transpose(-2,-1))
-    torch.cuda.synchronize(); bt = (time.time()-t0)/200
+    qa = QuantizedAttention(4, d, device)
+    K_idx, K_norms = qa.quantize_keys(Kf)
 
-    tq = TurboQuantMSE(4, d, device)
-    flat = Kf.float().reshape(-1,d)
-    idx, norms = tq.quantize(flat.reshape(nh*sl, d))
+    # Baseline: standard Q @ K^T
+    for _ in range(WARMUP): _ = torch.matmul(Qf, Kf.transpose(-2,-1))
+    t0e = torch.cuda.Event(enable_timing=True)
+    t1e = torch.cuda.Event(enable_timing=True)
+    t0e.record()
+    for _ in range(ITERS): _ = torch.matmul(Qf, Kf.transpose(-2,-1))
+    t1e.record(); torch.cuda.synchronize()
+    baseline_ms = t0e.elapsed_time(t1e) / ITERS
 
-    for _ in range(5):
-        Kd = tq.dequantize(idx, norms).reshape(1,nh,sl,d).half()
+    # Old: dequantize then matmul
+    for _ in range(WARMUP):
+        Kd = qa.dequantize(K_idx, K_norms).reshape(1,nh,sl,d).half()
         _ = torch.matmul(Qf, Kd.transpose(-2,-1))
-    torch.cuda.synchronize(); t0 = time.time()
-    for _ in range(200):
-        Kd = tq.dequantize(idx, norms).reshape(1,nh,sl,d).half()
+    t0e.record()
+    for _ in range(ITERS):
+        Kd = qa.dequantize(K_idx, K_norms).reshape(1,nh,sl,d).half()
         _ = torch.matmul(Qf, Kd.transpose(-2,-1))
-    torch.cuda.synchronize(); tt = (time.time()-t0)/200
+    t1e.record(); torch.cuda.synchronize()
+    dequant_ms = t0e.elapsed_time(t1e) / ITERS
 
-    speedup[sl] = {"baseline_ms": round(bt*1000,3), "tq4_ms": round(tt*1000,3),
-                   "ratio": round(bt/tt,2) if tt>0 else 0}
-    print(f"  seq_len={sl}: baseline={bt*1000:.3f}ms, tq4={tt*1000:.3f}ms", flush=True)
+    # New: quantized attention (no full dequantize)
+    for _ in range(WARMUP): _ = qa.quantized_attention_scores(Qf, K_idx, K_norms)
+    t0e.record()
+    for _ in range(ITERS): _ = qa.quantized_attention_scores(Qf, K_idx, K_norms)
+    t1e.record(); torch.cuda.synchronize()
+    qattn_ms = t0e.elapsed_time(t1e) / ITERS
+
+    entry = {
+        "baseline_ms": round(baseline_ms, 4),
+        "dequant_then_matmul_ms": round(dequant_ms, 4),
+        "quantized_attn_ms": round(qattn_ms, 4),
+        "speedup_vs_baseline": round(baseline_ms / qattn_ms, 2) if qattn_ms > 0 else 0,
+        "speedup_vs_dequant": round(dequant_ms / qattn_ms, 2) if qattn_ms > 0 else 0,
+    }
+    speedup[sl] = entry
+    print(f"  seq_len={sl}: baseline={baseline_ms:.3f}ms  dequant+mm={dequant_ms:.3f}ms  "
+          f"quant_attn={qattn_ms:.3f}ms  speedup_vs_base={entry['speedup_vs_baseline']:.2f}x  "
+          f"speedup_vs_dequant={entry['speedup_vs_dequant']:.2f}x", flush=True)
+
 results["attention_speedup"] = speedup
 
 with open("/workspace/results.json", "w") as f:
@@ -487,10 +556,18 @@ def print_results(results: dict):
 
     if "attention_speedup" in results:
         print(f"\n{'=' * 85}")
-        print(f"  ATTENTION SPEEDUP (GPU)")
+        print(f"  QUANTIZED ATTENTION SPEEDUP (GPU)")
         print(f"{'=' * 85}")
+        hdr = f"  {'SeqLen':>8} | {'Baseline':>10} | {'Dequant+MM':>12} | {'Quant Attn':>12} | {'vs Base':>8} | {'vs Dequant':>10}"
+        print(hdr)
+        print("  " + "-" * (len(hdr) - 2))
         for sl, d in sorted(results["attention_speedup"].items(), key=lambda x: int(x[0])):
-            print(f"  seq_len={sl}: FP16={d['baseline_ms']:.3f}ms, TQ4={d['tq4_ms']:.3f}ms, speedup={d['ratio']:.2f}x")
+            bms = d.get('baseline_ms', d.get('baseline_ms', 0))
+            dms = d.get('dequant_then_matmul_ms', d.get('tq4_ms', 0))
+            qms = d.get('quantized_attn_ms', dms)
+            svb = d.get('speedup_vs_baseline', d.get('ratio', 0))
+            svd = d.get('speedup_vs_dequant', 0)
+            print(f"  {sl:>8} | {bms:>9.3f}ms | {dms:>11.3f}ms | {qms:>11.3f}ms | {svb:>7.2f}x | {svd:>9.2f}x")
 
 
 def main():
