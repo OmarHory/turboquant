@@ -12,7 +12,7 @@ KV cache tensor shape: [batch_size, num_heads, seq_len, head_dim]
 import torch
 from typing import Any
 from transformers.cache_utils import DynamicCache, DynamicLayer
-from turboquant import TurboQuantMSE, TurboQuantConfig
+from turboquant.core import TurboQuantMSE, TurboQuantConfig
 
 
 class TurboQuantLayer(DynamicLayer):
@@ -69,33 +69,26 @@ class TurboQuantLayer(DynamicLayer):
         self.is_initialized = True
 
         if self.outlier_quantizer is not None and self._outlier_mask is None:
-            # Detect outlier heads based on key magnitude variance
-            # Shape: [batch, num_heads, seq_len, head_dim]
-            var_per_head = key_states.float().var(dim=-1).mean(dim=(0, 2))  # [num_heads]
+            var_per_head = key_states.float().var(dim=-1).mean(dim=(0, 2))
             _, top_indices = var_per_head.topk(min(self.num_outlier_channels, var_per_head.shape[0]))
             self._outlier_mask = torch.zeros(var_per_head.shape[0], dtype=torch.bool)
             self._outlier_mask[top_indices] = True
 
     def _quantize_tensor(self, x: torch.Tensor):
-        """
-        Quantize [batch, heads, new_tokens, head_dim] tensor.
-        Returns (indices, norms, shape, outlier_indices) where outlier_indices
-        is None if no outlier separation is used.
-        """
         shape = x.shape
         batch, heads, seq, dim = shape
-        flat = x.float().reshape(-1, self.head_dim)  # [batch*heads*seq, head_dim]
+        flat = x.float().reshape(-1, self.head_dim)
 
         norms = flat.norm(dim=-1, keepdim=True)
         safe_norms = norms.clamp(min=1e-10)
         normalized = flat / safe_norms
 
         if self.outlier_quantizer is not None and self._outlier_mask is not None:
-            x_reshaped = x.float()  # [batch, heads, seq, dim]
+            x_reshaped = x.float()
             regular_mask = ~self._outlier_mask
 
-            regular = x_reshaped[:, regular_mask]  # [batch, n_regular, seq, dim]
-            outlier = x_reshaped[:, self._outlier_mask]  # [batch, n_outlier, seq, dim]
+            regular = x_reshaped[:, regular_mask]
+            outlier = x_reshaped[:, self._outlier_mask]
 
             r_flat = regular.reshape(-1, dim)
             r_norms = r_flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
@@ -122,7 +115,6 @@ class TurboQuantLayer(DynamicLayer):
             }
 
     def _dequantize_all(self, data_list):
-        """Dequantize and concatenate all stored chunks."""
         if not data_list:
             return torch.tensor([], dtype=self.dtype, device=self.device)
 
@@ -191,10 +183,6 @@ class TurboQuantLayer(DynamicLayer):
         return -1
 
     def get_memory_bytes(self) -> int:
-        """
-        Calculate effective memory for quantized storage.
-        Counts actual bits: b bits per index value, plus norms overhead.
-        """
         total_bits = 0
         total_norm_bytes = 0
 
@@ -251,7 +239,6 @@ class TurboQuantCache(DynamicCache):
         ]
 
     def get_memory_bytes(self) -> int:
-        """Total effective memory used by all quantized layers."""
         return sum(
             layer.get_memory_bytes()
             for layer in self.layers
@@ -259,7 +246,6 @@ class TurboQuantCache(DynamicCache):
         )
 
     def get_effective_bits(self) -> float:
-        """Calculate effective bits per value across all layers."""
         total_elements = 0
         total_bits = 0
         for layer in self.layers:

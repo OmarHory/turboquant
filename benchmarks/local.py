@@ -18,7 +18,7 @@ import sys
 import torch
 import gc
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
-from patched_model import TurboQuantCache, get_baseline_kv_memory
+from turboquant.cache import TurboQuantCache, get_baseline_kv_memory
 
 MODEL_NAME = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
 
