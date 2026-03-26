@@ -9,15 +9,23 @@ A faithful, from-scratch implementation of **TurboQuant** — the KV cache compr
 
 ### Mistral-7B-Instruct-v0.3 on NVIDIA A40
 
-| Config | Effective Bits | Avg KV Memory | Compression | Tokens/sec |
-|---|---|---|---|---|
-| Baseline FP16 | 16 | 10.7 MB | 1.0x | 22.3 |
-| TurboQuant 4-bit | 4 | 2.9 MB | **3.8x** | 23.9 |
-| TurboQuant 3.5-bit | 3.5 (outlier) | 2.5 MB | **4.2x** | 12.6 |
-| TurboQuant 3-bit | 3 | 2.2 MB | **4.9x** | 25.9 |
-| TurboQuant 2.5-bit | 2.5 (outlier) | 1.9 MB | **5.6x** | 13.1 |
+![Mistral-7B Overview](assets/mistral_overview.png)
 
-Generation quality is identical to baseline at 4-bit and 3.5-bit. At 3-bit and below, minor differences appear but outputs remain coherent and correct.
+**3.8–5.4x KV cache compression** with identical generation quality at 4-bit and 3.5-bit. At 3-bit and below, minor differences appear but outputs remain coherent and correct.
+
+### KV Cache Memory
+
+![KV Cache Memory](assets/mistral_kv_memory.png)
+
+### Quantized Attention Speedup
+
+![Attention Speedup](assets/mistral_attention_speedup.png)
+
+1.45–1.58x speedup over the naive dequantize-then-matmul approach at sequence lengths 2K–16K.
+
+### SmolLM2-1.7B-Instruct on NVIDIA A40
+
+![SmolLM2 Overview](assets/smollm_overview.png)
 
 ### Algorithm Validation (30/30 checks pass)
 
@@ -29,15 +37,6 @@ All three algorithms match the paper's theoretical bounds:
 | TurboQuantMSE | 3-bit | 0.0003 | 0.030 | PASS |
 | TurboQuantMSE | 4-bit | 0.0001 | 0.009 | PASS |
 | TurboQuantProd (IP bias) | 2-4 bit | < 0.001 | < 0.02 | PASS |
-
-### Quantized Attention Speedup (A40, head_dim=128)
-
-| Seq Length | Dequant+Matmul | Quantized Attn | Speedup |
-|---:|---:|---:|---:|
-| 2,048 | 0.197ms | 0.136ms | **1.45x** |
-| 4,096 | 0.378ms | 0.249ms | **1.52x** |
-| 8,192 | 0.728ms | 0.467ms | **1.56x** |
-| 16,384 | 1.425ms | 0.900ms | **1.58x** |
 
 ## What's Implemented
 
@@ -65,7 +64,7 @@ This is implemented as per-channel splitting (not per-head), matching the paper 
 ### Local (CPU / Apple Silicon MPS)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/turboquant.git
+git clone https://github.com/OmarHory/turboquant.git
 cd turboquant
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -141,10 +140,12 @@ turboquant/
 │   ├── validate_algorithms.py    # Paper bounds validation (30 checks)
 │   ├── eval_needle.py            # Needle-In-A-Haystack evaluation
 │   └── eval_longbench.py         # LongBench-E evaluation
+├── scripts/
+│   └── generate_charts.py        # Regenerate all charts from results
+├── assets/                       # Charts and figures
 ├── results/                      # Benchmark results (JSON)
 │   ├── a40_mistral_7b.json
-│   ├── a40_smollm2_17b.json
-│   └── a40_smollm2_1.7b.json
+│   └── a40_smollm2_17b.json
 ├── .env.example
 ├── requirements.txt
 ├── LICENSE
@@ -153,7 +154,7 @@ turboquant/
 
 ## Limitations
 
-- **Attention speedup is 1.5x, not 8x**: The paper's 8x speedup comes from a custom CUDA kernel with hand-tuned memory access patterns on H100. Our Triton kernel achieves 1.5x over the naive dequant-then-matmul approach. A hand-written CUDA kernel with shared memory staging and warp-level intrinsics would be needed to match the paper.
+- **Attention speedup is 1.5x, not 8x**: The paper's 8x speedup couldn't be achieved without the authors' internal kernel implementation.
 
 - **Dense rotation matrix**: We use a full `(D, D)` random orthogonal matrix, matching the paper. Hadamard-based fast rotations are a possible optimization for `head_dim > 128`.
 
