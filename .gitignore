@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Secrets
+.env
+
+# RunPod / Flash
+.flash/
+.runpod/
+_gpu_bench_remote.py
+
+# Data / results
+*.json
+
+# Research docs (not part of the TurboQuant implementation)
+gpu-hardware-comparison-2025-2026.md
+gpu-requirements-report.md
+deepseek-models-research.md
+llm-model-comparison-2025-2026.md
+open-weight-llm-releases-jan-mar-2026.md
+epya-gpu-requirements.html
+
+# OS
+.DS_Store

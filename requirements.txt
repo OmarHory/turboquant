@@ -1,0 +1,11 @@
+# Core dependencies
+torch
+transformers
+accelerate
+sentencepiece
+protobuf
+scipy
+numpy
+
+# GPU benchmark (RunPod) — optional
+requests
