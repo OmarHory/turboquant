@@ -11,8 +11,8 @@
     {
       "text": "The capital of France is Paris.",
       "tokens": 8,
-      "time": 0.942,
-      "tps": 8.5,
+      "time": 0.949,
+      "tps": 8.4,
       "kv_memory": 3014656,
       "peak_gpu_mb": 14508.6,
       "prompt": "Factual QA"
@@ -20,8 +20,8 @@
     {
       "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
       "tokens": 79,
-      "time": 2.702,
-      "tps": 29.2,
+      "time": 2.474,
+      "tps": 31.9,
       "kv_memory": 14286848,
       "peak_gpu_mb": 14520.8,
       "prompt": "Reasoning"
@@ -29,19 +29,28 @@
     {
       "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n```\n\nIn this function, `n` is the number for which you want to compute the factorial. If `n` is 0, the function returns 1",
       "tokens": 100,
-      "time": 3.428,
-      "tps": 29.2,
+      "time": 3.125,
+      "tps": 32.0,
       "kv_memory": 14942208,
       "peak_gpu_mb": 14521.6,
       "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural networks are a class of machine learning models inspired by the structure and function of the human brain. They are composed of interconnected layers of nodes, or \"neurons,\" which process and transmit information. The learning process in neural networks involves adjusting the weights of these connections to improve the network's ability to make accurate predictions.\n\n1. **Forward Propagation**: The first step in training a neural network is to feed input data through the network, a process known as forward propagation. Each neuron in a layer receives an input, applies an activation function (e.g., sigmoid, ReLU) to the weighted sum of its inputs, and passes the result to the next layer. The output of the final layer is the network's prediction.\n\n   Example: Consider a simple neural network with one input, one hidden layer, and one output. The input is a binary image (0 or 1) representing a handwritten digit (0 or 1). The hidden layer has three neurons, and the output layer has one neuron, representing the network's prediction of the digit.\n\n2. **Loss Function**: The difference between the network's prediction and the actual output is measured using a loss function. Common loss functions include mean squared error (MSE) for regression tasks and cross-entropy for classification tasks. The goal of training is to minimize this loss.\n\n   Example: For our binary digit classification problem, the loss function could be cross-entropy:\n   Loss = -(y * log(prediction) + (1 - y) * log(1 - prediction))\n   where y is the actual output (0 or 1) and prediction is the network's output (also 0 or 1).\n\n3. **Backpropagation**: To adjust the weights, we use a process called backpropagation. This involves computing the gradient of the loss function with respect to each weight in the network. The gradient represents the direction of steepest ascent for the loss function at the current weights, so by moving in the opposite direction (i.e., decreasing the gradient), we can decrease the loss.\n\n   Example: To compute the gradient for a single weight w, we first compute the derivative of the loss function with respect to w (using chain rule for composite functions). Then, we multiply this derivative by the activation function's derivative at the neuron receiving the",
+      "tokens": 512,
+      "time": 16.114,
+      "tps": 31.8,
+      "kv_memory": 73007104,
+      "peak_gpu_mb": 14608.6,
+      "prompt": "Long Generation"
     }
   ],
   "tq4": [
     {
       "text": "The capital of France is Paris.",
       "tokens": 8,
-      "time": 0.389,
-      "tps": 20.6,
+      "time": 0.41,
+      "tps": 19.5,
       "kv_memory": 800768,
       "peak_gpu_mb": 14512.0,
       "prompt": "Factual QA"
@@ -49,8 +58,8 @@
     {
       "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
       "tokens": 79,
-      "time": 3.146,
-      "tps": 25.1,
+      "time": 3.104,
+      "tps": 25.5,
       "kv_memory": 3794944,
       "peak_gpu_mb": 14532.7,
       "prompt": "Reasoning"
@@ -58,19 +67,28 @@
     {
       "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n\nFor example, calling `factorial(5)` will return `120`.\n\nHowever, it's important to note that this function can lead to a stack",
       "tokens": 100,
-      "time": 3.831,
-      "tps": 26.1,
+      "time": 4.019,
+      "tps": 24.9,
       "kv_memory": 3969024,
       "peak_gpu_mb": 14534.4,
       "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural Networks and Learning: A Comprehensive Guide\n\nNeural networks are a class of machine learning models that are inspired by the structure and function of the human brain. They are composed of interconnected layers of nodes, or \"neurons,\" which process and transmit information. These networks learn to perform tasks, such as image recognition, speech recognition, and natural language processing, by adjusting the weights of the connections between the neurons based on the data they are trained on.\n\nThe learning process in neural networks involves minimizing the difference between the network's predictions and the actual values, known as the \"loss\" or \"error.\" This is achieved through a process called gradient descent, which iteratively adjusts the weights to minimize the loss.\n\n1. **Gradient Descent**: Gradient descent is an optimization algorithm used to find the minimum of a function by iteratively moving in the direction of steepest descent. In the context of neural networks, the function we want to minimize is the loss function. The intuition behind gradient descent is that if we take small steps in the direction of the negative gradient of the loss function, we will eventually reach a point where the loss is minimized.\n\n   For example, consider a simple linear regression problem where we want to find the best line (y = mx + b) that fits a set of data points (x, y). The loss function for this problem is the sum of the squared differences between the predicted y-values and the actual y-values. The gradient of this loss function with respect to the parameters m and b gives us the direction of steepest ascent (or descent, in our case). By taking steps in the opposite direction of the gradient, we can iteratively adjust m and b to minimize the loss.\n\n2. **Backpropagation**: Backpropagation is the method used to compute the gradients for the weights in a neural network. It works by computing the gradient of the loss function with respect to each weight in the network, starting from the output layer and propagating the gradients backwards through the network.\n\n   To understand backpropagation, let's consider a simple neural network with one hidden layer and an output layer. The output of the network is given by:\n\n   y = sigmoid(w1 * x + b1)\n\n   where w1 is the weight between the input and hidden layer, x is the input, b1 is the",
+      "tokens": 512,
+      "time": 21.628,
+      "tps": 23.7,
+      "kv_memory": 19392512,
+      "peak_gpu_mb": 14659.9,
+      "prompt": "Long Generation"
     }
   ],
   "tq3.5": [
     {
       "text": "The capital of France is Paris.",
       "tokens": 8,
-      "time": 0.657,
-      "tps": 12.2,
+      "time": 0.667,
+      "tps": 12.0,
       "kv_memory": 706560,
       "peak_gpu_mb": 14511.8,
       "prompt": "Factual QA"
@@ -78,8 +96,8 @@
     {
       "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nSo, the train goes 150 miles.",
       "tokens": 81,
-      "time": 6.293,
-      "tps": 12.9,
+      "time": 7.224,
+      "tps": 11.2,
       "kv_memory": 3409920,
       "peak_gpu_mb": 14537.8,
       "prompt": "Reasoning"
@@ -87,11 +105,20 @@
     {
       "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n```\n\nIn this function, the base case is when `n` is 0, in which case the function returns 1. For any other number, it calls itself",
       "tokens": 100,
-      "time": 7.799,
-      "tps": 12.8,
+      "time": 7.952,
+      "tps": 12.6,
       "kv_memory": 3502080,
       "peak_gpu_mb": 14540.3,
       "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural networks are a class of machine learning models modeled loosely after the human brain. They are composed of interconnected layers of nodes, or \"neurons,\" which process and transmit information. The learning process in neural networks involves adjusting the weights of these connections to minimize the difference between the network's predictions and the actual data. Here's a detailed explanation of the key concepts:\n\n1. **Backpropagation**: Backpropagation is the method used to calculate the gradient (rate of change) of the loss function with respect to the weights in the network. It is a recursive algorithm that computes the gradient by propagating the error (difference between predicted and actual output) from the output layer to the input layer, through the hidden layers.\n\n   Intuition: Imagine a simple neural network with an input layer, a hidden layer, and an output layer. The network makes a prediction, and the error is calculated as the difference between the predicted output and the actual output. Backpropagation calculates the contribution of each weight to this error and adjusts the weights accordingly to minimize the error.\n\n   Example: Consider a neural network with an input layer (x1, x2), a hidden layer (h1, h2), and an output layer (y). The weights between the input and hidden layers are w11, w12, and the weights between the hidden and output layers are w21, w22. The output y is calculated as: y = w21*h1 + w22*h2. If the actual output is y_actual, the error E is calculated as E = (y_actual - y)^2. Backpropagation calculates the gradient of E with respect to each weight (w11, w12, w21, w22) to adjust them.\n\n2. **Gradient Descent**: Gradient Descent is an optimization algorithm used to minimize a function by iteratively moving in the direction of steepest descent of the function. In the context of neural networks, it is used to adjust the weights to minimize the loss function.\n\n   Intuition: Gradient Descent works by taking small steps in the direction of the negative gradient of the loss function. This means it moves in the direction that decreases the loss function the most.\n\n   Example: Continuing from the previous example, after calculating the gradient of the error E with respect",
+      "tokens": 512,
+      "time": 42.509,
+      "tps": 12.0,
+      "kv_memory": 17111040,
+      "peak_gpu_mb": 14690.0,
+      "prompt": "Long Generation"
     }
   ],
   "tq3": [
@@ -107,8 +134,8 @@
     {
       "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nSo, the train goes 150 miles.",
       "tokens": 80,
-      "time": 3.031,
-      "tps": 26.4,
+      "time": 3.13,
+      "tps": 25.6,
       "kv_memory": 2928640,
       "peak_gpu_mb": 14533.0,
       "prompt": "Reasoning"
@@ -116,19 +143,28 @@
     {
       "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function works by checking if the input number `n` is 0. If it is, it returns 1 (since the factorial of 0 is 1",
       "tokens": 100,
-      "time": 3.824,
-      "tps": 26.2,
+      "time": 4.354,
+      "tps": 23.0,
       "kv_memory": 3035136,
       "peak_gpu_mb": 14534.4,
       "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural networks, a key component of artificial intelligence (AI), are designed to learn patterns from data. They are inspired by the structure and function of the human brain, consisting of interconnected layers of nodes or \"neurons.\" Here's a detailed explanation of how neural networks learn, focusing on backpropagation, gradient descent, learning rate, loss functions, and regularization techniques.\n\n1. **Loss Functions**: A loss function, also known as an objective function, measures the difference between the network's output and the actual values in the training data. The goal of a neural network is to minimize this loss function to improve its predictions. For example, the mean squared error (MSE) loss function calculates the average squared difference between the predicted and actual values:\n\n    MSE = 1/n \u03a3 (y_pred - y_true)^2\n\n    where y_pred is the predicted value, y_true is the true value, and n is the number of samples.\n\n2. **Gradient Descent**: Gradient descent is an optimization algorithm used to minimize the loss function. It works by iteratively adjusting the weights of the network in the direction of the negative gradient of the loss function. The intuition behind this is that if we move in the direction that decreases the loss, we are moving closer to the minimum of the loss function. The learning rate determines the size of the steps taken during each iteration. A small learning rate results in slower convergence but less chance of overshooting the minimum, while a large learning rate can lead to faster convergence but a higher risk of overshooting the minimum.\n\n3. **Backpropagation**: Backpropagation is the method used to calculate the gradients for each weight in the network. It works by propagating the error from the output layer, through the hidden layers, and back to the input layer. The intuition behind backpropagation is that the gradient of the loss function with respect to a weight is the sum of the gradients of the loss function with respect to all the neurons that receive the weight's output. This allows us to efficiently compute the gradients for all weights in the network.\n\n4. **Learning Rate**: The learning rate is a hyperparameter that determines the size of the steps taken during each iteration of gradient descent. A small learning rate results in slower convergence but less chance of overshooting the minimum, while",
+      "tokens": 512,
+      "time": 20.512,
+      "tps": 25.0,
+      "kv_memory": 14829568,
+      "peak_gpu_mb": 14659.9,
+      "prompt": "Long Generation"
     }
   ],
   "tq2.5": [
     {
       "text": "The capital of France is Paris.",
       "tokens": 8,
-      "time": 0.63,
-      "tps": 12.7,
+      "time": 0.645,
+      "tps": 12.4,
       "kv_memory": 518144,
       "peak_gpu_mb": 14511.8,
       "prompt": "Factual QA"
@@ -136,8 +172,8 @@
     {
       "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = Speed * Time\nDistance = 60 mph * 2.5 hours\n\nMultiply the speed by the time to get the distance:\n\nDistance = 150 miles\n\nSo, the train goes 1",
       "tokens": 100,
-      "time": 7.926,
-      "tps": 12.6,
+      "time": 8.016,
+      "tps": 12.5,
       "kv_memory": 2928640,
       "peak_gpu_mb": 14544.8,
       "prompt": "Reasoning"
@@ -145,55 +181,64 @@
     {
       "text": "Here is a simple Python function that computes the factorial of a number recursively:\n\n```python\ndef factorial(n):\n    if n == 1:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function uses recursion to calculate the factorial of a number. If the input number `n` is 1, it returns 1 (since the factorial of ",
       "tokens": 100,
-      "time": 7.643,
-      "tps": 13.1,
+      "time": 7.912,
+      "tps": 12.6,
       "kv_memory": 2568192,
       "peak_gpu_mb": 14540.3,
       "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural Networks and Learning: A Comprehensive Guide to Backpropagation, Gradient Descent, Loss Functions, and Regularization Techniques\n\nNeural networks, inspired by the structure and function of the human brain, are a set of algorithms modeled after the interconnected neurons in the brain. These artificial neural networks (ANNs) are used in machine learning to solve complex problems, such as image recognition, speech recognition, and natural language processing.\n\nLearning in Neural Networks:\n\n1. Backpropagation:\nBackpropagation is a method used to train neural networks by adjusting the weights of the connections between neurons. It calculates the gradient of the loss function with respect to the weights, which helps in determining the direction and magnitude of the adjustments to be made to the weights.\n\nExample: Suppose we have a simple neural network with an input layer, a hidden layer, and an output layer. The goal is to predict the output for a given input. The backpropagation algorithm works as follows:\n\na. Forward pass: Feed the input through the network to obtain the predicted output.\nb. Compute the error (loss) between the predicted output and the actual output.\nc. Backpropagation: Calculate the gradient of the loss with respect to the weights and adjust the weights accordingly.\nd. Repeat the forward pass and backpropagation multiple times (epochs) until the network converges to a satisfactory level of accuracy.\n\n2. Gradient Descent:\nGradient descent is an optimization algorithm used to minimize a function by iteratively moving in the direction of steepest descent of the function. In the context of neural networks, it is used to minimize the loss function.\n\nExample: Suppose we have a function f(x) that we want to minimize. The gradient descent algorithm works as follows:\n\na. Initialize the learning rate (step size) \u03b1.\nb. Start with an initial point x0 and compute the gradient \u2207f(x0).\nc. Update the point x1 = x0 - \u03b1 * \u2207f(x0).\nd. Repeat the process until the function converges to a minimum.\n\n3. Learning Rate:\nThe learning rate is a hyperparameter that determines the step size in the gradient descent algorithm. A small learning rate results in slow convergence but more stable learning",
+      "tokens": 512,
+      "time": 41.936,
+      "tps": 12.2,
+      "kv_memory": 12548096,
+      "peak_gpu_mb": 14690.0,
+      "prompt": "Long Generation"
     }
   ],
   "attention_speedup": {
     "512": {
-      "baseline_ms": 0.0211,
-      "dequant_then_matmul_ms": 0.0952,
-      "quantized_attn_ms": 0.1199,
-      "speedup_vs_baseline": 0.18,
+      "baseline_ms": 0.0212,
+      "dequant_then_matmul_ms": 0.0982,
+      "quantized_attn_ms": 0.124,
+      "speedup_vs_baseline": 0.17,
       "speedup_vs_dequant": 0.79
     },
     "1024": {
-      "baseline_ms": 0.0217,
-      "dequant_then_matmul_ms": 0.0986,
-      "quantized_attn_ms": 0.1205,
-      "speedup_vs_baseline": 0.18,
-      "speedup_vs_dequant": 0.82
+      "baseline_ms": 0.0222,
+      "dequant_then_matmul_ms": 0.1013,
+      "quantized_attn_ms": 0.1328,
+      "speedup_vs_baseline": 0.17,
+      "speedup_vs_dequant": 0.76
     },
     "2048": {
-      "baseline_ms": 0.0213,
-      "dequant_then_matmul_ms": 0.1966,
-      "quantized_attn_ms": 0.1355,
-      "speedup_vs_baseline": 0.16,
-      "speedup_vs_dequant": 1.45
+      "baseline_ms": 0.0261,
+      "dequant_then_matmul_ms": 0.1963,
+      "quantized_attn_ms": 0.1534,
+      "speedup_vs_baseline": 0.17,
+      "speedup_vs_dequant": 1.28
     },
     "4096": {
-      "baseline_ms": 0.0218,
-      "dequant_then_matmul_ms": 0.3775,
-      "quantized_attn_ms": 0.2489,
+      "baseline_ms": 0.0221,
+      "dequant_then_matmul_ms": 0.3778,
+      "quantized_attn_ms": 0.248,
       "speedup_vs_baseline": 0.09,
       "speedup_vs_dequant": 1.52
     },
     "8192": {
       "baseline_ms": 0.0319,
-      "dequant_then_matmul_ms": 0.7279,
+      "dequant_then_matmul_ms": 0.7274,
       "quantized_attn_ms": 0.4671,
       "speedup_vs_baseline": 0.07,
       "speedup_vs_dequant": 1.56
     },
     "16384": {
       "baseline_ms": 0.0595,
-      "dequant_then_matmul_ms": 1.4255,
-      "quantized_attn_ms": 0.8999,
+      "dequant_then_matmul_ms": 1.4256,
+      "quantized_attn_ms": 0.8992,
       "speedup_vs_baseline": 0.07,
-      "speedup_vs_dequant": 1.58
+      "speedup_vs_dequant": 1.59
     }
   }
 }

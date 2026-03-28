@@ -1,0 +1,244 @@
+{
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "model_config": {
+    "layers": 32,
+    "heads": 8,
+    "head_dim": 128,
+    "params_B": 7.25
+  },
+  "baseline": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.717,
+      "tps": 11.2,
+      "kv_memory": 3014656,
+      "peak_gpu_mb": 14508.6,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
+      "tokens": 79,
+      "time": 2.206,
+      "tps": 35.8,
+      "kv_memory": 14286848,
+      "peak_gpu_mb": 14520.8,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n```\n\nIn this function, `n` is the number for which you want to compute the factorial. If `n` is 0, the function returns 1",
+      "tokens": 100,
+      "time": 2.785,
+      "tps": 35.9,
+      "kv_memory": 14942208,
+      "peak_gpu_mb": 14521.6,
+      "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural Networks learn by finding the optimal weights and biases for their connections, which allow them to make accurate predictions or classifications. This learning process is achieved through a method called Gradient Descent, combined with a technique called Backpropagation. Let's break down these concepts and related terms:\n\n1. **Neural Networks**: A neural network is a series of layers, each containing multiple nodes or neurons. Each neuron takes in some input, applies an activation function, and passes the output to the next layer. The final layer produces the network's prediction.\n\n2. **Loss Function**: The loss function, also known as the cost function, measures the difference between the network's prediction and the actual output. Common loss functions include Mean Squared Error (MSE) for regression tasks and Cross-Entropy for classification tasks. For example, in a binary classification problem, the Cross-Entropy loss function is defined as:\n\n   Loss = -(y * log(prediction) + (1 - y) * log(1 - prediction))\n\n   where y is the actual output (0 or 1) and prediction is the network's output (a value between 0 and 1).\n\n3. **Gradient Descent**: Gradient Descent is an optimization algorithm that iteratively adjusts the weights and biases to minimize the loss function. It works by calculating the gradient (the slope) of the loss function with respect to each weight and bias, and then moving in the opposite direction of the gradient. This process is repeated until the network's predictions are satisfactory.\n\n4. **Backpropagation**: Backpropagation is the method used to calculate the gradients for each weight and bias in a neural network. It works by propagating the error (the derivative of the loss function with respect to the output) backwards through the network, layer by layer, until it reaches the input layer. This process allows the network to learn from its mistakes and adjust its weights and biases accordingly.\n\n5. **Learning Rate**: The learning rate is a hyperparameter that determines the step size during each iteration of Gradient Descent. A high learning rate can cause the network to overshoot the optimal solution, while a low learning rate can lead to slow convergence. Finding the optimal learning rate is crucial for the network's performance.\n\n6. **Regularization Techniques",
+      "tokens": 512,
+      "time": 14.449,
+      "tps": 35.4,
+      "kv_memory": 73007104,
+      "peak_gpu_mb": 14608.5,
+      "prompt": "Long Generation"
+    }
+  ],
+  "tq4": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.433,
+      "tps": 18.5,
+      "kv_memory": 800768,
+      "peak_gpu_mb": 14512.0,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
+      "tokens": 79,
+      "time": 3.76,
+      "tps": 21.0,
+      "kv_memory": 3794944,
+      "peak_gpu_mb": 14532.7,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n``\n\nFor example, calling `factorial(5)` would return `120`.\n\nHowever, it's important to note that this function can lead to a stack",
+      "tokens": 100,
+      "time": 4.675,
+      "tps": 21.4,
+      "kv_memory": 3969024,
+      "peak_gpu_mb": 14534.4,
+      "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural Networks and Learning: A Comprehensive Guide\n\nNeural networks are a class of machine learning models that are inspired by the structure and function of the human brain. They are composed of interconnected layers of nodes, or \"neurons,\" which process and transmit information. The learning process in neural networks involves adjusting the weights of these connections to minimize the difference between the network's predictions and the actual data.\n\n1. Backpropagation:\n\nBackpropagation is the algorithm used to train neural networks. It is a method for calculating the gradient of the loss function with respect to the weights of the network. The intuition behind backpropagation is to propagate the error (or gradient) from the output layer, through the hidden layers, and back to the input layer. This allows the network to adjust the weights of the connections in a way that reduces the error in the network's predictions.\n\nFor example, consider a simple neural network with one hidden layer and an output layer. The network takes an input x and predicts a value y' based on the weights w1 and w2. The actual output y is compared to the predicted output y' using a loss function, such as mean squared error (MSE). Backpropagation calculates the gradient of the loss function with respect to the weights w1 and w2, and updates the weights in the direction that minimizes the loss.\n\n2. Gradient Descent:\n\nGradient descent is an optimization algorithm used to minimize a function by iteratively moving in the direction of the negative gradient. In the context of neural networks, gradient descent is used to update the weights during the training process. The learning rate is a hyperparameter that determines the step size for each weight update. A small learning rate results in slower convergence but may avoid overshooting the optimal solution, while a large learning rate may lead to faster convergence but may overshoot the optimal solution.\n\n3. Learning Rate:\n\nThe learning rate is a hyperparameter that controls the step size for each weight update during gradient descent. A small learning rate results in slower convergence but may avoid overshooting the optimal solution, while a large learning rate may lead to faster convergence but may overshoot the optimal solution. Finding the optimal learning rate is a common challenge in training neural networks.\n\n4. Loss Functions:\n\nA loss function is a measure of the difference between the network's predictions",
+      "tokens": 512,
+      "time": 25.037,
+      "tps": 20.4,
+      "kv_memory": 19392512,
+      "peak_gpu_mb": 14659.9,
+      "prompt": "Long Generation"
+    }
+  ],
+  "tq3.5": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.729,
+      "tps": 11.0,
+      "kv_memory": 706560,
+      "peak_gpu_mb": 14511.8,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nThe train goes 150 miles.",
+      "tokens": 79,
+      "time": 6.7,
+      "tps": 11.8,
+      "kv_memory": 3348480,
+      "peak_gpu_mb": 14537.2,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function works by checking if the input number `n` is 0. If it is, it returns 1 (since the factorial of 0 is 1",
+      "tokens": 100,
+      "time": 8.478,
+      "tps": 11.8,
+      "kv_memory": 3502080,
+      "peak_gpu_mb": 14540.3,
+      "prompt": "Code Generation"
+    },
+    {
+      "text": "Title: Understanding Neural Network Learning: Backpropagation, Gradient Descent, Learning Rate, Loss Functions, and Regularization Techniques\n\nNeural networks are a fundamental component of machine learning and artificial intelligence, inspired by the structure and function of the human brain. They are designed to learn patterns in data and make predictions or decisions with minimal human intervention. Let's delve into the key concepts that enable neural networks to learn: backpropagation, gradient descent, learning rate, loss functions, and regularization techniques.\n\n1. Backpropagation:\nBackpropagation is an algorithm used to train artificial neural networks. It calculates the gradient (rate of change) of the loss function with respect to the weights in the network. This process allows the network to learn from its mistakes by adjusting the weights to minimize the loss.\n\nIntuition: Imagine a student trying to solve a series of math problems. If the student gets a question wrong, they adjust their approach (change the weights) based on the feedback (error) they receive. Backpropagation is like the feedback mechanism in a neural network, guiding the network to adjust its weights to improve its performance.\n\n2. Gradient Descent:\nGradient descent is an optimization algorithm used to minimize a function by iteratively moving in the direction of steepest descent, which is the direction of the negative gradient. In the context of neural networks, it is used to update the weights during the backpropagation process.\n\nIntuition: Imagine standing on a hill and trying to find the lowest point. You take small steps downhill, adjusting your direction based on the steepness of the slope (gradient) at your current position. Gradient descent is like this process, but it takes infinitesimally small steps to find the minimum of the loss function.\n\n3. Learning Rate:\nThe learning rate is a hyperparameter that determines the size of the steps taken during gradient descent. A high learning rate may cause the network to overshoot the optimal solution, while a low learning rate may result in slow convergence.\n\nIntuition: If you're trying to find the lowest point on a hill, a high step size might cause you to overshoot the target, while a small step size might make the journey longer. The learning rate is like the step size in this analogy, controlling how quickly the network adjusts its weights.\n\n4. Loss Functions",
+      "tokens": 512,
+      "time": 44.08,
+      "tps": 11.6,
+      "kv_memory": 17111040,
+      "peak_gpu_mb": 14690.0,
+      "prompt": "Long Generation"
+    }
+  ],
+  "tq3": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.391,
+      "tps": 20.5,
+      "kv_memory": 612352,
+      "peak_gpu_mb": 14512.0,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. So,\n\nDistance = 60 mph * 2.5 hours = 150 miles\n\nSo, the train goes 150 miles.",
+      "tokens": 81,
+      "time": 3.815,
+      "tps": 21.2,
+      "kv_memory": 2955264,
+      "peak_gpu_mb": 14533.2,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here is a simple Python function that computes the factorial of a number using recursion:\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nThis function works by checking if the input number `n` is 0. If it is, it returns 1 (since the factorial of 0 is 1",
+      "tokens": 100,
+      "time": 4.7,
+      "tps": 21.3,
+      "kv_memory": 3035136,
+      "peak_gpu_mb": 14534.4,
+      "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural networks, a key component of artificial intelligence, learn from data through a process that involves multiple layers of interconnected nodes, or neurons. The learning process is based on a method called backpropagation, which adjusts the weights of the connections between nodes to minimize the difference between the network's predictions and the actual values (labels) in the training data.\n\n1. **Forward Propagation**: The learning process begins with forward propagation, where the input data is passed through the network's layers, and the output is calculated. Each node in a layer takes the weighted sum of its inputs, applies an activation function (e.g., sigmoid, ReLU) to the result, and passes the output to the next layer.\n\n   For example, consider a simple neural network with one input, one hidden layer, and one output layer. The input is multiplied by the weights, summed, and passed through an activation function. The output of the hidden layer becomes the input for the output layer, which follows the same process.\n\n2. **Loss Function**: The difference between the network's output and the actual label is measured using a loss function, such as mean squared error (MSE) or cross-entropy. The loss function quantifies the error made by the network.\n\n   For instance, if our network predicts a value of 0.5 for a binary classification problem, and the actual label is 1, the MSE loss would be (1-0.5)^2 = 0.25.\n\n3. **Backpropagation**: To adjust the weights and minimize the loss, backpropagation is used. It calculates the gradient (rate of change) of the loss with respect to each weight in the network. This gradient indicates how much changing a weight would affect the loss.\n\n   During backpropagation, the network computes the gradient for each weight by working backwards from the output layer, through the hidden layers, to the input layer. This process is repeated for each training example.\n\n4. **Gradient Descent**: With the gradients calculated, the network updates the weights using gradient descent, an optimization algorithm that iteratively adjusts the weights in the direction that reduces the loss. The learning rate determines the step size for each weight update. A small learning rate results in slower but more stable convergence, while a large learning rate may lead to oscillations or overshoot",
+      "tokens": 512,
+      "time": 24.83,
+      "tps": 20.6,
+      "kv_memory": 14829568,
+      "peak_gpu_mb": 14659.9,
+      "prompt": "Long Generation"
+    }
+  ],
+  "tq2.5": [
+    {
+      "text": "The capital of France is Paris.",
+      "tokens": 8,
+      "time": 0.683,
+      "tps": 11.7,
+      "kv_memory": 518144,
+      "peak_gpu_mb": 14511.8,
+      "prompt": "Factual QA"
+    },
+    {
+      "text": "To find the distance traveled, we can use the formula:\n\nDistance = Speed * Time\n\nIn this case, the speed is 60 mph, and the time is 2.5 hours. However, we need to convert the hours to hours, as the time is given in decimal hours (2.5 hours).\n\n1 hour = 60 minutes\n\nSo, 0.5 hours = 0.5 * 60 = 30",
+      "tokens": 100,
+      "time": 8.441,
+      "tps": 11.8,
+      "kv_memory": 2928640,
+      "peak_gpu_mb": 14544.8,
+      "prompt": "Reasoning"
+    },
+    {
+      "text": "Here's a simple Python function that computes the factorial of a number recursively. This function takes an integer `n` as an argument and returns the factorial of that number.\n\n```python\ndef factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)\n```\n\nYou can use this function to compute the factorial of any non-negative",
+      "tokens": 100,
+      "time": 8.459,
+      "tps": 11.8,
+      "kv_memory": 2568192,
+      "peak_gpu_mb": 14540.3,
+      "prompt": "Code Generation"
+    },
+    {
+      "text": "Neural Networks and Backpropagation:\n\nNeural networks are a class of machine learning models that are designed to mimic the structure and function of the human brain. They are composed of interconnected layers of nodes, or \"neurons,\" which process and transmit information. The primary goal of neural networks is to learn patterns in data and make predictions or decisions based on that learning.\n\nBackpropagation is the method used to train neural networks. It is an iterative process that adjusts the weights and biases of the network to minimize the difference between the network's output and the actual output (target). This process is repeated for multiple iterations, known as epochs.\n\nDuring backpropagation, the network makes a prediction, calculates the error (loss) between the predicted output and the actual output, and then adjusts the weights and biases to minimize that error. This process is repeated for each training example in the dataset.\n\nLearning Rate:\nThe learning rate is a hyperparameter that determines the step size taken during the weight updates during backpropagation. A high learning rate can lead to faster convergence but may result in overshooting the optimal solution, while a low learning rate may lead to slow convergence. A good starting point for the learning rate is usually 0.1, and it can be adjusted during training to improve convergence.\n\nLoss Functions:\nA loss function, also known as an objective function, measures the difference between the network's output and the actual output. Common loss functions include Mean Squared Error (MSE) for regression tasks and Cross-Entropy for classification tasks. For example, in a binary classification problem, the Cross-Entropy loss function is:\n\nL(y_true, y_pred) = -(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred)\n\nGradient Descent:\nGradient Descent is an optimization algorithm used to minimize a function by iteratively moving in the direction of the steepest descent (negative gradient) of the loss surface. In the context of neural networks, it is used to adjust the weights and biases during backpropagation to minimize the loss.\n\nLearning Rate and Gradient Descent:\nThe learning rate determines the step size taken during each iteration of gradient descent. A high learning rate may lead to overshooting the",
+      "tokens": 512,
+      "time": 45.795,
+      "tps": 11.2,
+      "kv_memory": 12548096,
+      "peak_gpu_mb": 14690.0,
+      "prompt": "Long Generation"
+    }
+  ],
+  "attention_speedup": {
+    "512": {
+      "baseline_ms": 0.028,
+      "dequant_then_matmul_ms": 0.1331,
+      "quantized_attn_ms": 0.1809,
+      "speedup_vs_baseline": 0.16,
+      "speedup_vs_dequant": 0.74
+    },
+    "1024": {
+      "baseline_ms": 0.0293,
+      "dequant_then_matmul_ms": 0.1377,
+      "quantized_attn_ms": 0.1785,
+      "speedup_vs_baseline": 0.16,
+      "speedup_vs_dequant": 0.77
+    },
+    "2048": {
+      "baseline_ms": 0.0294,
+      "dequant_then_matmul_ms": 0.1363,
+      "quantized_attn_ms": 0.1736,
+      "speedup_vs_baseline": 0.17,
+      "speedup_vs_dequant": 0.79
+    },
+    "4096": {
+      "baseline_ms": 0.0291,
+      "dequant_then_matmul_ms": 0.2266,
+      "quantized_attn_ms": 0.174,
+      "speedup_vs_baseline": 0.17,
+      "speedup_vs_dequant": 1.3
+    },
+    "8192": {
+      "baseline_ms": 0.0292,
+      "dequant_then_matmul_ms": 0.4199,
+      "quantized_attn_ms": 0.2201,
+      "speedup_vs_baseline": 0.13,
+      "speedup_vs_dequant": 1.91
+    },
+    "16384": {
+      "baseline_ms": 0.0297,
+      "dequant_then_matmul_ms": 0.7176,
+      "quantized_attn_ms": 0.3875,
+      "speedup_vs_baseline": 0.08,
+      "speedup_vs_dequant": 1.85
+    }
+  }
+}

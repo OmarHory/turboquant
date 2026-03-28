@@ -134,12 +134,17 @@ class BitWidthConfig:
         return (96 * self.base_bits + 32 * self.outlier_bits) / 128
 
 
-BIT_WIDTH_PRESETS: dict[str, BitWidthConfig] = {
-    "2.5": BitWidthConfig("2.5-bit (2b + 32ch outlier@3b)", 2, 32, 3),
-    "3":   BitWidthConfig("3-bit (no outliers)", 3, 0, 0),
-    "3.5": BitWidthConfig("3.5-bit (3b + 32ch outlier@4b)", 3, 32, 4),
-    "4":   BitWidthConfig("4-bit (no outliers)", 4, 0, 0),
-}
+def get_bit_width_presets(head_dim: int) -> dict[str, BitWidthConfig]:
+    outlier_ch = 32 if head_dim == 128 else (16 if head_dim == 64 else head_dim // 4)
+    return {
+        "baseline": BitWidthConfig("baseline (no quantization)", 0, 0, 0),
+        "2.5": BitWidthConfig(f"2.5-bit (2b + {outlier_ch}ch outlier@3b)", 2, outlier_ch, 3),
+        "3":   BitWidthConfig("3-bit (no outliers)", 3, 0, 0),
+        "3.5": BitWidthConfig(f"3.5-bit (3b + {outlier_ch}ch outlier@4b)", 3, outlier_ch, 4),
+        "4":   BitWidthConfig("4-bit (no outliers)", 4, 0, 0),
+    }
+
+BIT_WIDTH_PRESETS: dict[str, BitWidthConfig] = get_bit_width_presets(128)
 
 
 @dataclass
@@ -182,7 +187,9 @@ def check_retrieval(text: str) -> bool:
     return all(kw in text_lower for kw in RETRIEVAL_KEYWORDS)
 
 
-def make_cache(model_config, bw_cfg: BitWidthConfig, device: torch.device) -> TurboQuantCache:
+def make_cache(model_config, bw_cfg: BitWidthConfig, device: torch.device):
+    if bw_cfg.base_bits == 0:
+        return None
     head_dim = model_config.hidden_size // model_config.num_attention_heads
     num_layers = model_config.num_hidden_layers
     return TurboQuantCache(
@@ -269,7 +276,8 @@ def run_evaluation(
     num_layers = model.config.num_hidden_layers
     print(f"Model ready: {num_layers} layers, head_dim={head_dim}")
 
-    bw_configs = {k: BIT_WIDTH_PRESETS[k] for k in bit_width_keys if k in BIT_WIDTH_PRESETS}
+    presets = get_bit_width_presets(head_dim)
+    bw_configs = {k: presets[k] for k in bit_width_keys if k in presets}
     if not bw_configs:
         print(f"No valid bit-width configs found in {bit_width_keys}")
         sys.exit(1)
@@ -411,8 +419,8 @@ def main():
     )
     parser.add_argument(
         "--bit-widths",
-        default="2.5,3,3.5,4",
-        help="Comma-separated effective bit-widths (default: 2.5,3,3.5,4)",
+        default="baseline,2.5,3,3.5,4",
+        help="Comma-separated effective bit-widths (default: baseline,2.5,3,3.5,4)",
     )
     parser.add_argument(
         "--context-lengths",
@@ -436,9 +444,10 @@ def main():
     depths = [int(d.strip()) for d in args.depths.split(",")]
     hf_token = os.environ.get("HF_TOKEN")
 
-    invalid_bws = [bw for bw in bit_widths if bw not in BIT_WIDTH_PRESETS]
+    all_valid = list(get_bit_width_presets(128).keys())
+    invalid_bws = [bw for bw in bit_widths if bw not in all_valid]
     if invalid_bws:
-        print(f"Unknown bit-widths: {invalid_bws}. Available: {list(BIT_WIDTH_PRESETS.keys())}")
+        print(f"Unknown bit-widths: {invalid_bws}. Available: {all_valid}")
         sys.exit(1)
 
     print(f"{'=' * 60}")

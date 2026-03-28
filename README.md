@@ -1,42 +1,46 @@
 # TurboQuant
 
-A faithful, from-scratch implementation of **TurboQuant** — the KV cache compression algorithm from Google Research that achieves **2.5–4 bit quantization with zero accuracy loss** and no training or calibration required.
+An open-source implementation of **TurboQuant** — the KV cache compression technique from Google Research. Compresses LLM KV caches to 2.5–4 bits per value with minimal quality loss, no training, and no calibration data.
 
 > Zandieh, Daliri, Hadian, Mirrokni. *"TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate"*
 > ICLR 2026 — [arXiv:2504.19874](https://arxiv.org/abs/2504.19874) | [Google Research Blog](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/)
 
-## Key Results
+## Results
 
-### Mistral-7B-Instruct-v0.3 on NVIDIA A40
+### Mistral-7B-Instruct-v0.3 — NVIDIA A100-SXM4-80GB
+
+![Mistral-7B A100 Overview](assets/a100_mistral_7b_overview.png)
+
+- **3.8–5.7x memory compression** with matching generation quality at 4-bit and 3.5-bit
+- At 3-bit and below, minor output differences appear but results remain coherent and correct
+- **1.85x quantized attention speedup** vs dequantize-then-matmul at 16K sequence length
+
+### KV Cache Memory (A100)
+
+![KV Cache Memory A100](assets/a100_mistral_7b_kv_memory.png)
+
+### Quantized Attention Speedup (A100)
+
+![Attention Speedup A100](assets/a100_mistral_7b_attention_speedup.png)
+
+### Mistral-7B-Instruct-v0.3 — NVIDIA A40
 
 ![Mistral-7B Overview](assets/mistral_overview.png)
 
-**3.8–5.4x KV cache compression** with identical generation quality at 4-bit and 3.5-bit. At 3-bit and below, minor differences appear but outputs remain coherent and correct.
-
-### KV Cache Memory
-
-![KV Cache Memory](assets/mistral_kv_memory.png)
-
-### Quantized Attention Speedup
-
-![Attention Speedup](assets/mistral_attention_speedup.png)
-
-1.45–1.58x speedup over the naive dequantize-then-matmul approach at sequence lengths 2K–16K.
-
-### SmolLM2-1.7B-Instruct on NVIDIA A40
+### SmolLM2-1.7B-Instruct — NVIDIA A40
 
 ![SmolLM2 Overview](assets/smollm_overview.png)
 
-### Algorithm Validation (30/30 checks pass)
+### Algorithm Validation
 
-All three algorithms match the paper's theoretical bounds:
+All three algorithms pass 30/30 checks against the paper's theoretical error bounds:
 
-| Algorithm | Bit Width | Measured MSE | Paper Upper Bound | Status |
+| Algorithm | Metric | Measured | Paper Bound | Status |
 |---|---|---|---|---|
-| TurboQuantMSE | 2-bit | 0.0009 | 0.117 | PASS |
-| TurboQuantMSE | 3-bit | 0.0003 | 0.030 | PASS |
-| TurboQuantMSE | 4-bit | 0.0001 | 0.009 | PASS |
-| TurboQuantProd (IP bias) | 2-4 bit | < 0.001 | < 0.02 | PASS |
+| TurboQuantMSE (4-bit) | MSE | 0.0001 | ≤ 0.009 | PASS |
+| TurboQuantMSE (3-bit) | MSE | 0.0003 | ≤ 0.030 | PASS |
+| TurboQuantMSE (2-bit) | MSE | 0.0009 | ≤ 0.117 | PASS |
+| TurboQuantProd | IP bias | < 0.001 | < 0.02 | PASS |
 
 ## What's Implemented
 
@@ -44,20 +48,18 @@ All three algorithms match the paper's theoretical bounds:
 |---|---|---|
 | `TurboQuantMSE` | Algorithm 1 — MSE-optimal quantizer via random rotation + Lloyd-Max | `turboquant/core.py` |
 | `QJL` | Definition 1 — 1-bit Quantized Johnson-Lindenstrauss transform | `turboquant/core.py` |
-| `TurboQuantProd` | Algorithm 2 — Unbiased inner-product quantizer (MSE + QJL residual) | `turboquant/core.py` |
+| `TurboQuantProd` | Algorithm 2 — Unbiased inner-product quantizer (MSE + QJL) | `turboquant/core.py` |
 | `TurboQuantCache` | KV cache with per-channel outlier-aware quantization (Section 4.3) | `turboquant/cache.py` |
-| `TQLayerFused` | Cache layer that exposes compressed indices for quantized attention | `turboquant/cache.py` |
-| `QuantizedAttention` | Compute Q@K^T directly on compressed indices (no dequantize) | `turboquant/attention.py` |
-| `FusedQuantizedAttentionCUDA` | Triton kernel: centroid lookup + dot product in one pass | `turboquant/cuda_kernels.py` |
-| Bit-packing | Pack 2/3/4-bit indices into tightly packed bytes | `turboquant/packing.py` |
+| `TQLayerFused` | Cache layer exposing compressed indices for quantized attention | `turboquant/cache.py` |
+| `QuantizedAttention` | Q@K^T directly on compressed indices without dequantization | `turboquant/attention.py` |
+| `FusedQuantizedAttentionCUDA` | Triton kernel: centroid lookup + dot product fused | `turboquant/cuda_kernels.py` |
+| Bit-packing | 2/3/4-bit indices packed into bytes for true memory savings | `turboquant/packing.py` |
 
 ### Per-Channel Outlier-Aware Quantization (Section 4.3)
 
-The paper's key technique for aggressive compression: within each head, the top-k channels (by RMS magnitude) are quantized at higher precision. For `head_dim=128`:
-- **2.5-bit**: 32 outlier channels at 3-bit, 96 regular channels at 2-bit
-- **3.5-bit**: 32 outlier channels at 4-bit, 96 regular channels at 3-bit
-
-This is implemented as per-channel splitting (not per-head), matching the paper exactly.
+For aggressive compression below 4 bits, channels with highest RMS magnitude get more bits:
+- **2.5-bit effective**: 32 outlier channels at 3-bit, 96 regular at 2-bit (head_dim=128)
+- **3.5-bit effective**: 32 outlier channels at 4-bit, 96 regular at 3-bit (head_dim=128)
 
 ## Quick Start
 
@@ -74,13 +76,13 @@ python -m benchmarks.local
 
 ### GPU via RunPod
 
-Spins up a GPU pod, runs everything, prints results, auto-terminates. No lingering charges.
+Spins up a GPU pod, runs benchmarks, prints results, and auto-terminates.
 
 ```bash
 cp .env.example .env
 # Add your RunPod API key and (optional) HuggingFace token
 
-python -m benchmarks.gpu                              # SmolLM-1.7B on A40 (default)
+python -m benchmarks.gpu                              # SmolLM-1.7B on A40
 python -m benchmarks.gpu --model mistral-7b           # Mistral-7B on A40
 python -m benchmarks.gpu --model mistral-7b --gpu a100  # Mistral-7B on A100
 ```
@@ -91,36 +93,40 @@ python -m benchmarks.gpu --model mistral-7b --gpu a100  # Mistral-7B on A100
 python -m benchmarks.validate_algorithms
 ```
 
-Runs all 30 checks against the paper's theoretical bounds (MSE, inner-product error, bias, recall@k).
+Runs 30 checks against the paper's theoretical bounds (MSE, inner-product error, bias, recall@k).
 
 ### Needle-In-A-Haystack Evaluation
 
 ```bash
-python -m benchmarks.eval_needle --model meta-llama/Llama-3.1-8B-Instruct
+python -m benchmarks.eval_needle --model mistralai/Mistral-7B-Instruct-v0.3
 ```
+
+Tests retrieval accuracy across context lengths (4K–16K) and bit widths (baseline through 2.5-bit).
 
 ### LongBench-E Evaluation
 
 ```bash
-python -m benchmarks.eval_longbench --model meta-llama/Llama-3.1-8B-Instruct --max-samples 20
+python -m benchmarks.eval_longbench --model mistralai/Mistral-7B-Instruct-v0.3 --max-samples 25
 ```
+
+Evaluates quantized KV cache quality across 12 long-context tasks (QA, summarization, code, etc.).
 
 ## How It Works
 
-TurboQuant's core insight: random rotation transforms **any** input vector into a well-behaved distribution, enabling optimal per-coordinate scalar quantization that is provably within **2.7x of the information-theoretic lower bound**.
+TurboQuant's core insight: a random orthogonal rotation transforms any input vector into a distribution where per-coordinate scalar quantization is provably near-optimal.
 
-1. **Random Rotation** — Multiply by a random orthogonal matrix Pi. Every coordinate of the rotated vector follows a known distribution (converging to Gaussian), regardless of input data.
+1. **Random Rotation** — Multiply by a random orthogonal matrix. Each coordinate of the rotated vector follows a known distribution, regardless of input data.
 
-2. **Lloyd-Max Scalar Quantization** — Apply an optimal 1D quantizer per coordinate. The codebook is precomputed once from the known distribution — no calibration data needed.
+2. **Lloyd-Max Scalar Quantization** — Apply an optimal 1D quantizer per coordinate. The codebook is precomputed from the known distribution — no calibration needed.
 
-3. **Per-Channel Outlier Separation** — For aggressive compression (2.5–3.5 bits), channels with highest RMS magnitude get more bits, preserving quality.
+3. **Per-Channel Outlier Separation** — For compression below 4 bits, channels with highest RMS magnitude get higher precision.
 
-4. **Quantized Attention** — Instead of dequantizing keys for attention, rotate the query into quantization space and compute dot products directly via centroid lookups.
+4. **Quantized Attention** — Rotate queries into quantization space and compute dot products via centroid lookups, avoiding full key dequantization.
 
 ```
-Quantize:   x  ──→  Pi @ x  ──→  bucketize  ──→  uint8 indices (b bits/dim)
-Attention:  Q  ──→  Q @ Pi^T ──→  matmul(centroids[idx])  ──→  scores
-                    (rotate once)   (no full dequantize needed)
+Quantize:   x  →  Pi @ x  →  bucketize  →  uint8 indices (b bits/dim)
+Attention:  Q  →  Q @ Pi^T →  matmul(centroids[idx])  →  scores
+                  (rotate once)  (no full dequantize needed)
 ```
 
 ## Project Structure
@@ -128,37 +134,34 @@ Attention:  Q  ──→  Q @ Pi^T ──→  matmul(centroids[idx])  ──→ 
 ```
 turboquant/
 ├── turboquant/                   # Core package
-│   ├── __init__.py               # Public API
+│   ├── __init__.py
 │   ├── core.py                   # TurboQuantMSE, QJL, TurboQuantProd
 │   ├── cache.py                  # KV cache: TurboQuantLayer, TQLayerFused
 │   ├── attention.py              # Quantized attention (skip dequantize)
 │   ├── cuda_kernels.py           # Fused Triton CUDA kernels
 │   └── packing.py                # Bit-packing for sub-byte indices
 ├── benchmarks/
-│   ├── local.py                  # CPU/MPS benchmark (SmolLM-1.7B)
-│   ├── gpu.py                    # RunPod GPU benchmark (multi-model)
+│   ├── local.py                  # CPU/MPS benchmark
+│   ├── gpu.py                    # RunPod GPU benchmark (multi-model, multi-GPU)
 │   ├── validate_algorithms.py    # Paper bounds validation (30 checks)
 │   ├── eval_needle.py            # Needle-In-A-Haystack evaluation
 │   └── eval_longbench.py         # LongBench-E evaluation
 ├── scripts/
-│   └── generate_charts.py        # Regenerate all charts from results
+│   └── generate_charts.py        # Regenerate charts from result JSONs
 ├── assets/                       # Charts and figures
 ├── results/                      # Benchmark results (JSON)
-│   ├── a40_mistral_7b.json
-│   └── a40_smollm2_17b.json
 ├── .env.example
 ├── requirements.txt
-├── LICENSE
-└── README.md
+└── LICENSE
 ```
 
 ## Limitations
 
-- **Attention speedup is 1.5x, not 8x**: The paper's 8x speedup couldn't be achieved without the authors' internal kernel implementation.
+- **Attention speedup is ~1.9x, not 8x.** The paper reports 8x. We achieve 1.85x on A100 at 16K sequence length. Achieving the full speedup likely requires the authors' optimized CUDA kernels, which were not released. Our implementation uses a Triton kernel for centroid lookup + dot product, which reduces memory bandwidth but doesn't match the paper's throughput.
 
-- **Dense rotation matrix**: We use a full `(D, D)` random orthogonal matrix, matching the paper. Hadamard-based fast rotations are a possible optimization for `head_dim > 128`.
+- **Dense rotation matrix.** We use a full (D×D) random orthogonal matrix, matching the paper. Hadamard-based fast rotations would be a practical optimization for head_dim > 128.
 
-- **Llama-3.1-8B not tested**: The Llama-3.1-8B model requires gated access on HuggingFace. Results are from Mistral-7B-Instruct-v0.3 (same architecture class, similar parameter count).
+- **Llama-3.1-8B not tested.** Llama-3.1-8B requires gated HuggingFace access. Results are from Mistral-7B-Instruct-v0.3 (same architecture class, similar scale).
 
 ## Citation
 

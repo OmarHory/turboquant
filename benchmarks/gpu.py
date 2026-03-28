@@ -286,16 +286,17 @@ prompts = [
     ("Factual QA", "What is the capital of France? Answer in one sentence."),
     ("Reasoning", "If a train travels at 60 mph for 2.5 hours, how far does it go? Show your reasoning."),
     ("Code Generation", "Write a Python function to compute factorial recursively."),
+    ("Long Generation", "Write a detailed explanation of how neural networks learn, covering backpropagation, gradient descent, learning rate, loss functions, and regularization techniques. Include concrete examples and explain the intuition behind each concept."),
 ]
 
-def generate(msgs, cache=None):
+def generate(msgs, cache=None, max_new_tokens=100):
     text = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
     inputs = tokenizer(text, return_tensors="pt").to(device)
     torch.cuda.synchronize(); gc.collect(); torch.cuda.reset_peak_memory_stats()
     t0 = time.time()
     with torch.no_grad():
         kw = dict(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"],
-                  max_new_tokens=100, do_sample=False, use_cache=True, return_dict_in_generate=True)
+                  max_new_tokens=max_new_tokens, do_sample=False, use_cache=True, return_dict_in_generate=True)
         if cache is not None: kw["past_key_values"] = cache
         out = model.generate(**kw)
     torch.cuda.synchronize()
@@ -325,7 +326,8 @@ for cfg_key, label, cfn in configs:
     results[cfg_key] = []
     for name, content in prompts:
         try:
-            r = generate([{"role":"user","content":content}], cfn())
+            max_tok = 512 if name == "Long Generation" else 100
+            r = generate([{"role":"user","content":content}], cfn(), max_new_tokens=max_tok)
             r["prompt"] = name
             results[cfg_key].append(r)
             print(f"  {name}: {r['tps']} tok/s, KV={r['kv_memory']} bytes", flush=True)
@@ -524,7 +526,8 @@ def run_benchmark(ssh_addr: str, hf_token: str, model_hf_id: str):
             break
 
     ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-                "-o", "LogLevel=ERROR", "-o", "IdentitiesOnly=yes", "-i", key_file]
+                "-o", "LogLevel=ERROR", "-o", "IdentitiesOnly=yes", "-i", key_file,
+                "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=10"]
     ssh_base = ["ssh"] + ssh_opts + ["-p", port, f"root@{host}"]
     scp_base = ["scp"] + ssh_opts + ["-P", port]
 
@@ -546,13 +549,40 @@ def run_benchmark(ssh_addr: str, hf_token: str, model_hf_id: str):
         env_parts.append(f"HF_TOKEN={hf_token}")
     env_prefix = " ".join(env_parts) + " "
 
-    print("  Running benchmark (this takes 3-8 minutes for 7-8B models)...")
+    print("  Running benchmark (this takes 5-30 minutes for 7-8B models)...")
     print("  " + "=" * 60)
-    run_cmd = ssh_base + [f"{env_prefix}python /workspace/bench.py"]
-    ret = subprocess.run(run_cmd)
 
-    if ret.returncode != 0:
-        print("  Benchmark script returned non-zero exit code.")
+    subprocess.run(ssh_base + [
+        f"rm -f /workspace/results.json /workspace/bench.done && "
+        f"nohup bash -c '{env_prefix}python /workspace/bench.py > /workspace/bench.log 2>&1; "
+        f"echo $? > /workspace/bench.done' &"
+    ], capture_output=True)
+
+    poll_interval = 30
+    max_wait = 1800
+    waited = 0
+    while waited < max_wait:
+        time.sleep(poll_interval)
+        waited += poll_interval
+        check = subprocess.run(ssh_base + ["cat /workspace/bench.done 2>/dev/null"],
+                               capture_output=True, text=True)
+        if check.returncode == 0 and check.stdout.strip():
+            exit_code = check.stdout.strip()
+            print(f"  Benchmark finished (exit code {exit_code}) after ~{waited}s")
+            break
+        if waited % 60 == 0:
+            tail = subprocess.run(ssh_base + ["tail -3 /workspace/bench.log 2>/dev/null"],
+                                  capture_output=True, text=True)
+            if tail.stdout.strip():
+                for line in tail.stdout.strip().splitlines():
+                    print(f"  [remote] {line}")
+    else:
+        print(f"  WARNING: Benchmark did not finish within {max_wait}s")
+
+    log = subprocess.run(ssh_base + ["cat /workspace/bench.log 2>/dev/null"],
+                         capture_output=True, text=True)
+    if log.stdout.strip():
+        print(log.stdout)
 
     print("  Downloading results...")
     results_local = Path(__file__).parent.parent / "results" / "benchmark_results.json"

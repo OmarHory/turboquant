@@ -26,38 +26,14 @@ Norms are folded into the scores as a diagonal scaling.
 import math
 import torch
 import numpy as np
-from scipy.stats import norm
+
+from turboquant.core import _lloyd_max_gaussian
 
 try:
     from turboquant.cuda_kernels import FusedQuantizedAttentionCUDA, HAS_TRITON
 except ImportError:
     HAS_TRITON = False
     FusedQuantizedAttentionCUDA = None
-
-
-def _lloyd_max_gaussian(num_levels, sigma=1.0, max_iter=200):
-    k = num_levels
-    centroids = np.array([sigma * norm.ppf((2 * i + 1) / (2 * k)) for i in range(k)])
-    for _ in range(max_iter):
-        boundaries = np.empty(k + 1)
-        boundaries[0], boundaries[k] = -np.inf, np.inf
-        for i in range(1, k):
-            boundaries[i] = (centroids[i - 1] + centroids[i]) / 2.0
-        new_c = np.empty(k)
-        for i in range(k):
-            lo, hi = boundaries[i], boundaries[i + 1]
-            lo_c, hi_c = max(lo, -6 * sigma), min(hi, 6 * sigma)
-            num_val = norm.expect(lambda x: x, loc=0, scale=sigma, lb=lo_c, ub=hi_c)
-            den = norm.cdf(hi, scale=sigma) - norm.cdf(lo, scale=sigma)
-            new_c[i] = num_val / den if den > 1e-15 else (lo_c + hi_c) / 2.0
-        if np.allclose(centroids, new_c, atol=1e-12):
-            break
-        centroids = new_c
-    boundaries = np.empty(k + 1)
-    boundaries[0], boundaries[k] = -np.inf, np.inf
-    for i in range(1, k):
-        boundaries[i] = (centroids[i - 1] + centroids[i]) / 2.0
-    return centroids, boundaries
 
 
 class QuantizedAttention:

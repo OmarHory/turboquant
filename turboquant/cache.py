@@ -17,6 +17,7 @@ import torch
 from typing import Any
 from transformers.cache_utils import DynamicCache, DynamicLayer
 from turboquant.core import TurboQuantMSE, TurboQuantConfig
+from turboquant.packing import pack_indices, unpack_indices, packed_size_bytes
 
 
 def detect_outlier_channels(key_states: torch.Tensor, num_outliers: int) -> torch.Tensor:
@@ -66,12 +67,14 @@ class TurboQuantLayer(DynamicLayer):
     """
 
     def __init__(self, head_dim: int, bit_width: int, num_outlier_channels: int = 0,
-                 outlier_bits: int = 0, device: torch.device | None = None):
+                 outlier_bits: int = 0, device: torch.device | None = None,
+                 use_packing: bool = False):
         super().__init__()
         self.head_dim = head_dim
         self.bit_width = bit_width
         self.num_outlier_channels = num_outlier_channels
         self.outlier_bits = outlier_bits
+        self.use_packing = use_packing
 
         dev = device or torch.device("cpu")
 
@@ -134,9 +137,15 @@ class TurboQuantLayer(DynamicLayer):
             o_norms = o_flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
             o_idx = self.outlier_quantizer.quantize(o_flat / o_norms)
 
+            if self.use_packing:
+                r_idx = pack_indices(r_idx.flatten(), self.bit_width)
+                o_idx = pack_indices(o_idx.flatten(), self.outlier_bits)
+
             return {
                 'regular_idx': r_idx, 'regular_norms': r_norms.squeeze(-1),
+                'regular_numel': batch * heads * seq * self.regular_dim,
                 'outlier_idx': o_idx, 'outlier_norms': o_norms.squeeze(-1),
+                'outlier_numel': batch * heads * seq * self.outlier_dim,
                 'full_shape': shape,
                 'bhs': batch * heads * seq,
             }
@@ -144,7 +153,15 @@ class TurboQuantLayer(DynamicLayer):
             flat = x.float().reshape(-1, self.head_dim)
             norms = flat.norm(dim=-1, keepdim=True).clamp(min=1e-10)
             idx = self.quantizer.quantize(flat / norms)
-            return {'idx': idx, 'norms': norms.squeeze(-1), 'full_shape': shape}
+
+            if self.use_packing:
+                idx = pack_indices(idx.flatten(), self.bit_width)
+
+            return {
+                'idx': idx, 'norms': norms.squeeze(-1),
+                'idx_numel': flat.shape[0] * self.head_dim,
+                'full_shape': shape,
+            }
 
     def _dequantize_all(self, data_list: list[dict]) -> torch.Tensor:
         if not data_list:
@@ -153,10 +170,19 @@ class TurboQuantLayer(DynamicLayer):
         parts = []
         for data in data_list:
             if 'regular_idx' in data:
-                r_hat = self.quantizer.dequantize(data['regular_idx'])
+                r_idx = data['regular_idx']
+                o_idx = data['outlier_idx']
+
+                if self.use_packing:
+                    r_idx = unpack_indices(r_idx, self.bit_width, data['regular_numel'])
+                    r_idx = r_idx.reshape(-1, self.regular_dim)
+                    o_idx = unpack_indices(o_idx, self.outlier_bits, data['outlier_numel'])
+                    o_idx = o_idx.reshape(-1, self.outlier_dim)
+
+                r_hat = self.quantizer.dequantize(r_idx)
                 r_hat = r_hat * data['regular_norms'].unsqueeze(-1)
 
-                o_hat = self.outlier_quantizer.dequantize(data['outlier_idx'])
+                o_hat = self.outlier_quantizer.dequantize(o_idx)
                 o_hat = o_hat * data['outlier_norms'].unsqueeze(-1)
 
                 shape = data['full_shape']
@@ -166,7 +192,12 @@ class TurboQuantLayer(DynamicLayer):
                 result[..., self._channel_mask] = o_hat.reshape(shape[0], shape[1], shape[2], self.outlier_dim)
                 parts.append(result.to(self.dtype))
             else:
-                flat = self.quantizer.dequantize(data['idx'])
+                idx = data['idx']
+                if self.use_packing:
+                    idx = unpack_indices(idx, self.bit_width, data['idx_numel'])
+                    idx = idx.reshape(-1, self.head_dim)
+
+                flat = self.quantizer.dequantize(idx)
                 flat = flat * data['norms'].unsqueeze(-1)
                 parts.append(flat.reshape(data['full_shape']).to(self.dtype))
 
@@ -208,19 +239,26 @@ class TurboQuantLayer(DynamicLayer):
         return -1
 
     def get_memory_bytes(self) -> int:
-        """Effective memory: count actual bits per index + float32 norms."""
-        total_bits = 0
+        """True memory footprint including packed index storage + float32 norms."""
+        total_idx_bytes = 0
         total_norm_bytes = 0
         for data in self._key_data + self._val_data:
             if 'regular_idx' in data:
-                total_bits += data['regular_idx'].numel() * self.bit_width
-                total_bits += data['outlier_idx'].numel() * self.outlier_bits
+                if self.use_packing:
+                    total_idx_bytes += data['regular_idx'].numel()  # already packed bytes
+                    total_idx_bytes += data['outlier_idx'].numel()
+                else:
+                    total_idx_bytes += packed_size_bytes(data['regular_idx'].numel(), self.bit_width)
+                    total_idx_bytes += packed_size_bytes(data['outlier_idx'].numel(), self.outlier_bits)
                 total_norm_bytes += data['regular_norms'].numel() * 4
                 total_norm_bytes += data['outlier_norms'].numel() * 4
             else:
-                total_bits += data['idx'].numel() * self.bit_width
+                if self.use_packing:
+                    total_idx_bytes += data['idx'].numel()
+                else:
+                    total_idx_bytes += packed_size_bytes(data['idx'].numel(), self.bit_width)
                 total_norm_bytes += data['norms'].numel() * 4
-        return total_bits // 8 + total_norm_bytes
+        return total_idx_bytes + total_norm_bytes
 
     def get_effective_bits_per_value(self) -> float:
         if self.outlier_quantizer is not None:
@@ -255,7 +293,8 @@ class TurboQuantCache(DynamicCache):
 
     def __init__(self, config=None, head_dim: int = 64, bit_width: int = 3,
                  num_layers: int = 24, num_outlier_channels: int = 0,
-                 outlier_bits: int = 0, device: torch.device | None = None):
+                 outlier_bits: int = 0, device: torch.device | None = None,
+                 use_packing: bool = False):
         super().__init__(config=config)
         self.head_dim = head_dim
         self.bit_width = bit_width
@@ -267,6 +306,7 @@ class TurboQuantCache(DynamicCache):
                 num_outlier_channels=num_outlier_channels,
                 outlier_bits=outlier_bits,
                 device=device,
+                use_packing=use_packing,
             )
             for _ in range(num_layers)
         ]

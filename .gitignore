@@ -13,19 +13,13 @@ build/
 .flash/
 .runpod/
 _gpu_bench_remote.py
-benchmark_results.json
+benchmarks/_run_all_evals.py
 
-# Research docs (not part of the implementation)
-gpu-hardware-comparison-2025-2026.md
-gpu-requirements-report.md
-deepseek-models-research.md
-llm-model-comparison-2025-2026.md
-open-weight-llm-releases-jan-mar-2026.md
-epya-gpu-requirements.html
-rightnowai-research.json
+# Research artifacts
+*.html
+
+# Social media drafts
+t/
 
 # OS
 .DS_Store
-
-
-scripts/

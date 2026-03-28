@@ -1,16 +1,8 @@
 """
-Benchmark: TurboQuant vs Baseline KV Cache Comparison
+Local benchmark: TurboQuant vs Baseline KV Cache on CPU / MPS.
 
-Runs SmolLM2-1.7B-Instruct with:
-  1. Baseline (standard FP32 KV cache)
-  2. TurboQuant 4-bit (TurboQuant_mse with b=4)
-  3. TurboQuant 3-bit (TurboQuant_mse with b=3, outlier-aware)
-
-Compares: generation quality, KV cache memory, and latency.
-
-Implementation follows Section 4.2-4.3 of the paper:
-  - Uses TurboQuant_mse for KV cache quantization
-  - Outlier channel handling for aggressive (3-bit) quantization
+Runs SmolLM2-1.7B-Instruct (or another small model) and compares
+baseline FP32 KV cache against TurboQuant at various bit widths.
 """
 
 import time
