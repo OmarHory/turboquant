@@ -96,7 +96,7 @@ def chart_throughput(results, model_name, filename):
                 f'{t:.1f}', ha='center', va='bottom', fontweight='bold', fontsize=12)
 
     ax.set_ylabel('Tokens / sec')
-    ax.set_title(f'Generation Throughput — {model_name} (NVIDIA A40)')
+    ax.set_title(f'Generation Throughput — {model_name} ({results.get("gpu", "GPU")})')
     ax.set_ylim(0, max(tps) * 1.25)
     _clean_axes(ax)
 
@@ -128,7 +128,7 @@ def chart_compression_vs_speed(results, model_name, filename):
 
     ax.set_xlabel('Compression Ratio (vs FP16)')
     ax.set_ylabel('Generation (tokens/sec)')
-    ax.set_title(f'Compression vs Speed — {model_name} (NVIDIA A40)')
+    ax.set_title(f'Compression vs Speed — {model_name} ({results.get("gpu", "GPU")})')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.grid(alpha=0.3)
@@ -178,7 +178,8 @@ def chart_attention_speedup(results, model_name, filename):
     ax2.set_title('Quantized Attention Speedup')
     _clean_axes(ax2)
 
-    fig.suptitle(f'{model_name} — NVIDIA A40', fontsize=16, fontweight='bold', y=1.02)
+    gpu = results.get("gpu", "GPU")
+    fig.suptitle(f'{model_name} — {gpu}', fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
     plt.savefig(ASSETS / filename, dpi=150, bbox_inches='tight')
     plt.close()
@@ -191,6 +192,7 @@ def chart_overview(results, model_name, filename):
     tps_vals = [avg(results, k, 'tps') for k in configs]
     colors = [COLORS[k] for k in configs]
     labels = [LABELS[k] for k in configs]
+    gpu = results.get("gpu", "GPU")
 
     baseline_mem = mems_mb[0]
     ratios = [baseline_mem / m if m > 0 else 1.0 for m in mems_mb]
@@ -231,7 +233,7 @@ def chart_overview(results, model_name, filename):
     ax3.spines['right'].set_visible(False)
     ax3.grid(alpha=0.3)
 
-    fig.suptitle(f'TurboQuant — {model_name} (NVIDIA A40)',
+    fig.suptitle(f'TurboQuant — {model_name} ({gpu})',
                  fontsize=16, fontweight='bold')
     plt.tight_layout()
     plt.savefig(ASSETS / filename, dpi=150, bbox_inches='tight')
@@ -432,9 +434,9 @@ if __name__ == "__main__":
         prefix = a100_file.stem
 
         print(f"Generating A100 charts for {model_short}...")
-        chart_overview(data, f"{model_short} (A100)", f"{prefix}_overview.png")
-        chart_kv_memory(data, f"{model_short} (A100)", f"{prefix}_kv_memory.png")
-        chart_attention_speedup(data, f"{model_short} (A100)", f"{prefix}_attention_speedup.png")
+        chart_overview(data, model_short, f"{prefix}_overview.png")
+        chart_kv_memory(data, model_short, f"{prefix}_kv_memory.png")
+        chart_attention_speedup(data, model_short, f"{prefix}_attention_speedup.png")
         print()
 
     for needle_name in ["needle_mistral_7b.json", "needle_eval.json"]:
