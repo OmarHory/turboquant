@@ -153,15 +153,15 @@ def chart_attention_speedup(results, model_name, filename):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
-    ax1.plot(seq_labels, baseline_ms, 'o-', color=COLORS['baseline'], linewidth=2,
-             markersize=8, label='Baseline Q@K^T')
-    ax1.plot(seq_labels, dequant_ms, 's-', color=COLORS['tq4'], linewidth=2,
+    ax1.plot(seq_labels, dequant_ms, 's-', color=COLORS['tq4'], linewidth=2.5,
              markersize=8, label='Dequant + Matmul')
-    ax1.plot(seq_labels, qattn_ms, 'D-', color=COLORS['tq2.5'], linewidth=2,
+    ax1.plot(seq_labels, qattn_ms, 'D-', color=COLORS['tq2.5'], linewidth=2.5,
              markersize=8, label='Quantized Attention')
+    ax1.fill_between(range(len(seq_labels)), dequant_ms, qattn_ms,
+                     alpha=0.12, color=COLORS['tq2.5'])
     ax1.set_xlabel('Sequence Length')
     ax1.set_ylabel('Latency (ms)')
-    ax1.set_title('Attention Latency')
+    ax1.set_title('Attention Latency (quantized paths)')
     ax1.legend(fontsize=10)
     _clean_axes(ax1)
 
